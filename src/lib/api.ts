@@ -407,6 +407,16 @@ export const regolaAggiungi = (
     priorita,
   });
 
+/**
+ * Quanti file colpirebbe un pattern, e fino a cinque percorsi di esempio.
+ *
+ * Conta con lo stesso matcher del motore, quindi il numero è esatto e vale
+ * anche per i pattern sul percorso. Un pattern non compilabile è un errore,
+ * non uno zero.
+ */
+export const regolaStima = (pattern: string) =>
+  chiama<[number, string[]]>("regola_stima", { pattern });
+
 export const regolaElimina = (id: number) =>
   chiama<void>("regola_elimina", { id });
 
@@ -437,6 +447,14 @@ export const operazioniAnnulla = (batch: string) =>
 
 export const organizzaPiano = (destinazione: string, contesti: string[]) =>
   chiama<PianoOperazioni>("organizza_piano", { destinazione, contesti });
+
+/**
+ * Cartella da proporre come destinazione: la sorgente che contiene già la
+ * maggior parte dei file di quei contesti. `null` quando non c'è nulla da cui
+ * dedurla (indice vuoto). Con la lista dei contesti vuota guarda tutto l'indice.
+ */
+export const organizzaDestinazione = (contesti: string[]) =>
+  chiama<string | null>("organizza_destinazione", { contesti });
 
 /* ==========================================================================
    Tracciati e lotti

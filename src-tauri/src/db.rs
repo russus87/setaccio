@@ -66,6 +66,14 @@ impl Db {
             conn.execute_batch(REGOLE_DI_SERIE)?;
             conn.pragma_update(None, "user_version", 1)?;
         }
+        if versione < 2 {
+            // I contesti diventano gerarchici: `lavoro-PAM` → `lavoro/PAM`.
+            // Il separatore non è decorativo, è quello che la modalità
+            // Organizza traduce in cartelle annidate (`lavoro/` con dentro
+            // `PAM/` e `DevOps/`) invece di una sfilza di cartelle sorelle.
+            conn.execute_batch(CONTESTI_GERARCHICI)?;
+            conn.pragma_update(None, "user_version", 2)?;
+        }
         Ok(())
     }
 }
@@ -187,17 +195,27 @@ CREATE TABLE IF NOT EXISTS impostazioni (
 /// nessuna classificazione dopo una pulizia distratta.
 const REGOLE_DI_SERIE: &str = r#"
 INSERT INTO regola (nome, asse, pattern, valore, priorita, builtin) VALUES
-  ('Lotti ILC',            'contesto', '**/T1Q*',                  'lavoro-ILC',        10, 1),
-  ('Lotti numerici',       'contesto', '**/3[0-9][0-9][0-9][0-9][0-9]*', 'lavoro-ILC',  15, 1),
-  ('Policy aziendali',     'contesto', 'BDOC_*',                   'lavoro-policy',     20, 1),
-  ('Documenti BeyonDoc',   'contesto', 'BeyonDoc*',                'lavoro-BeyonDoc',   20, 1),
+  ('Lotti ILC',            'contesto', '**/T1Q*',                  'lavoro/ILC',        10, 1),
+  ('Lotti numerici',       'contesto', '**/3[0-9][0-9][0-9][0-9][0-9]*', 'lavoro/ILC',  15, 1),
+  ('Policy aziendali',     'contesto', 'BDOC_*',                   'lavoro/policy',     20, 1),
+  ('Documenti BeyonDoc',   'contesto', 'BeyonDoc*',                'lavoro/BeyonDoc',   20, 1),
   ('Curriculum',           'contesto', 'CV_*',                     'personale',         20, 1),
   ('Libri e studio',       'contesto', '**/libri/**',              'studio',            30, 1),
   ('Kindle',               'contesto', '**/kindle/**',             'studio',            30, 1),
   ('Documenti personali',  'contesto', '**/russus_doc/**',         'personale',         30, 1),
-  ('RED',                  'contesto', '**/RED/**',                'lavoro-RED',        30, 1),
-  ('DevOps',               'contesto', '**/DevOps/**',             'lavoro-DevOps',     30, 1),
-  ('PAM',                  'contesto', '**/PAM/**',                'lavoro-PAM',        30, 1);
+  ('RED',                  'contesto', '**/RED/**',                'lavoro/RED',        30, 1),
+  ('DevOps',               'contesto', '**/DevOps/**',             'lavoro/DevOps',     30, 1),
+  ('PAM',                  'contesto', '**/PAM/**',                'lavoro/PAM',        30, 1);
+"#;
+
+/// Migrazione degli indici già esistenti alla forma gerarchica. Riscrive sia
+/// le regole sia i contesti già assegnati ai file, così chi ha già scansionato
+/// non si ritrova con due nomenclature che convivono.
+const CONTESTI_GERARCHICI: &str = r#"
+UPDATE regola SET valore = 'lavoro/' || substr(valore, 8)
+ WHERE asse = 'contesto' AND valore LIKE 'lavoro-%';
+UPDATE file   SET contesto = 'lavoro/' || substr(contesto, 8)
+ WHERE contesto LIKE 'lavoro-%';
 "#;
 
 // ---------------------------------------------------------------------------

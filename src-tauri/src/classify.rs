@@ -183,6 +183,48 @@ fn combacia(r: &Regola, path: &Path, nome: &str) -> bool {
     }
 }
 
+/// Quanti file dell'indice combaciano con un pattern, più qualche esempio.
+///
+/// Esiste perché la UI deve poter dire **quanti file colpisce** una regola
+/// prima che venga salvata, e quel numero va calcolato con lo stesso matcher
+/// che userà il motore. Stimarlo altrove significa riscrivere le regole dei
+/// glob e vederle divergere alla prima modifica.
+pub fn stima_pattern(db: &Db, pattern: &str) -> Result<(i64, Vec<String>)> {
+    if Glob::new(pattern).is_err() {
+        anyhow::bail!("pattern non valido: «{pattern}»");
+    }
+    // Un pattern che nomina cartelle si confronta col path intero, uno senza
+    // separatori col solo nome: la stessa scelta di `combacia`.
+    let finta = Regola {
+        id: 0,
+        nome: String::new(),
+        asse: "contesto".into(),
+        pattern: pattern.to_string(),
+        valore: String::new(),
+        priorita: 0,
+        attiva: true,
+        builtin: false,
+    };
+
+    let conn = db.conn();
+    let mut st = conn.prepare("SELECT path, nome FROM file")?;
+    let mut righe = st.query([])?;
+
+    let mut quanti = 0i64;
+    let mut esempi = Vec::new();
+    while let Some(r) = righe.next()? {
+        let path: String = r.get(0)?;
+        let nome: String = r.get(1)?;
+        if combacia(&finta, Path::new(&path), &nome) {
+            quanti += 1;
+            if esempi.len() < 5 {
+                esempi.push(path);
+            }
+        }
+    }
+    Ok((quanti, esempi))
+}
+
 /// La regola attiva di priorità più bassa che matcha, sull'asse richiesto. A
 /// parità di priorità vince quella incontrata per prima.
 fn regola_vincente<'a>(
@@ -524,4 +566,44 @@ mod test {
         assert_eq!(r.contesti_vicini, vec!["studio".to_string()]);
         assert!(r.pattern_suggeriti.contains(&"**/vari/**".to_string()));
     }
+    #[test]
+    fn la_stima_conta_con_lo_stesso_matcher_del_motore() {
+        let db = Db::in_memoria().unwrap();
+        let sid = db
+            .sorgente_aggiungi("/tmp/s", crate::types::Fascia::Documenti)
+            .unwrap();
+        let aggiungi = |path: &str, nome: &str| {
+            let f = crate::db::FileVisto {
+                path: path.into(),
+                nome: nome.into(),
+                ext: Some("pdf".into()),
+                size: 1,
+                mtime: 1,
+                tipo: Tipo::Documento,
+                motivo_tipo: "test".into(),
+                contesto: None,
+                motivo_contesto: None,
+                sorgente_id: sid,
+                archivio_padre: None,
+                lotto: None,
+            };
+            db.file_upsert(&f).unwrap();
+        };
+        aggiungi("/tmp/s/libri/rust.pdf", "rust.pdf");
+        aggiungi("/tmp/s/libri/altro.pdf", "altro.pdf");
+        aggiungi("/tmp/s/CV_Rossi.pdf", "CV_Rossi.pdf");
+
+        // Pattern sul percorso: conta i due dentro `libri/`.
+        let (n, esempi) = stima_pattern(&db, "**/libri/**").unwrap();
+        assert_eq!(n, 2, "esempi: {esempi:?}");
+
+        // Pattern sul solo nome.
+        let (n, _) = stima_pattern(&db, "CV_*").unwrap();
+        assert_eq!(n, 1);
+
+        // Nessun match, e pattern invalido che deve dare errore invece di zero.
+        assert_eq!(stima_pattern(&db, "ZZZ*").unwrap().0, 0);
+        assert!(stima_pattern(&db, "a[").is_err());
+    }
+
 }

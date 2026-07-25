@@ -12,8 +12,10 @@
     accorciaPath,
     faccette,
     FASCE,
+    formattaByte,
     formattaNumero,
     operazioniEsegui,
+    organizzaDestinazione,
     organizzaPiano,
     regolaAttiva,
     regolaElimina,
@@ -32,11 +34,12 @@
   } from "../api";
   import Badge from "../ui/Badge.svelte";
   import Bottone from "../ui/Bottone.svelte";
-  import Campo from "../ui/Campo.svelte";
   import Card from "../ui/Card.svelte";
   import Icona from "../ui/Icona.svelte";
   import Interruttore from "../ui/Interruttore.svelte";
   import Vuoto from "../ui/Vuoto.svelte";
+  import AlberoContesti from "./AlberoContesti.svelte";
+  import FormRegola from "./FormRegola.svelte";
   import RiepilogoPiano from "./RiepilogoPiano.svelte";
   import { messaggioErrore } from "./comuni";
 
@@ -50,13 +53,20 @@
 
   let fasciaNuova = $state<Fascia>("documenti");
   let aggiungendo = $state(false);
+  let formRegolaAperto = $state(false);
 
   // ---- Organizza ---------------------------------------------------------
-  let destinazione = $state("");
+  /** Quella proposta dal backend: la sorgente che contiene già quei file. */
+  let destinazionePredefinita = $state<string | null>(null);
+  /** Solo se l'utente insiste e ne sceglie un'altra a mano. */
+  let destinazioneManuale = $state<string | null>(null);
+  let cercandoDestinazione = $state(false);
   let contestiScelti = $state<string[]>([]);
   let piano = $state<PianoOperazioni | null>(null);
   let esito = $state<EsitoOperazioni | null>(null);
   let inCorso = $state(false);
+
+  const destinazione = $derived(destinazioneManuale ?? destinazionePredefinita ?? "");
 
   $effect(() => {
     void ricarica;
@@ -77,6 +87,29 @@
       })
       .finally(() => {
         if (vivo) caricando = false;
+      });
+    return () => {
+      vivo = false;
+    };
+  });
+
+  // La destinazione la propone il backend, e cambia con i contesti scelti:
+  // quasi sempre è la sorgente dove quei file stanno già, e cercarla a mano
+  // sarebbe far fare all'utente un lavoro che il database sa fare da solo.
+  $effect(() => {
+    const scelti = [...contestiScelti];
+    void ricarica;
+    let vivo = true;
+    cercandoDestinazione = true;
+    organizzaDestinazione(scelti)
+      .then((d) => {
+        if (vivo) destinazionePredefinita = d;
+      })
+      .catch((e) => {
+        if (vivo) errore = messaggioErrore(e);
+      })
+      .finally(() => {
+        if (vivo) cercandoDestinazione = false;
       });
     return () => {
       vivo = false;
@@ -154,17 +187,26 @@
   async function scegliDestinazione() {
     try {
       const p = await scegliCartella("Scegli dove organizzare i file");
-      if (p) destinazione = p;
+      if (p) destinazioneManuale = p;
     } catch (e) {
       errore = messaggioErrore(e);
     }
   }
 
+  /** I contesti scelti, con i conteggi delle faccette accanto. */
+  const vociScelte = $derived(
+    contesti.filter((c) => contestiScelti.includes(c.etichetta)),
+  );
+
+  const fileScelti = $derived(vociScelte.reduce((s, v) => s + v.quanti, 0));
+
   async function preparaOrganizza() {
-    if (!destinazione.trim()) return;
+    if (contestiScelti.length === 0) return;
     inCorso = true;
     esito = null;
     try {
+      // Con la destinazione vuota è il backend a dedurla, con la stessa
+      // logica del suggerimento: non serve inventarne una qui.
       piano = await organizzaPiano(destinazione.trim(), [...contestiScelti]);
       errore = null;
     } catch (e) {
@@ -369,6 +411,29 @@
     sottotitolo="Valutate dalla priorità più bassa alla più alta; la prima che aggancia vince"
     padding="nessuna"
   >
+    {#snippet azioni()}
+      <Bottone
+        variante={formRegolaAperto ? "fantasma" : "secondario"}
+        icona={formRegolaAperto ? "chiudi" : "piu"}
+        onclick={() => (formRegolaAperto = !formRegolaAperto)}
+      >
+        {formRegolaAperto ? "Chiudi il form" : "Nuova regola"}
+      </Bottone>
+    {/snippet}
+
+    {#if formRegolaAperto}
+      <div class="zona-form">
+        <FormRegola
+          {contesti}
+          {regole}
+          onsalvata={() => {
+            ricarica += 1;
+          }}
+          onchiudi={() => (formRegolaAperto = false)}
+        />
+      </div>
+    {/if}
+
     <div class="elenco-regole">
       {#if regoleMie.length > 0}
         <p class="sezione-regole">Le tue regole</p>
@@ -455,39 +520,46 @@
           <p class="nota-titolo">Di default Setaccio non sposta niente</p>
           <p class="nota-testo">
             Indicizzare e riordinare sono due cose diverse: la prima è
-            innocua, la seconda cambia il disco. Qui puoi chiedere di
-            raccogliere i file di uno o più contesti sotto una cartella di
-            destinazione. Vedrai comunque il piano prima che succeda qualcosa, e
-            l'operazione resta annullabile dai batch nella sezione Duplicati.
+            innocua, la seconda cambia il disco. Qui scegli <em>quali</em>
+            contesti raccogliere; la cartella di destinazione te la propone
+            Setaccio, ed è quella dove quei file già stanno. Vedrai comunque il
+            piano prima che succeda qualcosa, e l'operazione resta annullabile
+            dai batch nella sezione Duplicati.
           </p>
         </div>
       </div>
 
-      <div class="destinazione">
-        <Campo
-          bind:valore={destinazione}
-          etichetta="Cartella di destinazione"
-          segnaposto="/home/…/Archivio"
-          icona="cartella"
-          azzerabile
-          autocomplete="off"
-          spellcheck={false}
-        />
-        <Bottone variante="secondario" icona="cartella" onclick={scegliDestinazione}>
-          Scegli…
-        </Bottone>
-      </div>
-
       <div class="scelta-contesti">
-        <p class="nota-titolo">
-          Contesti da spostare
-          <span class="testo-tenue">
-            — nessuno selezionato significa «tutti quelli che hanno un contesto»
-          </span>
-        </p>
+        <div class="capo-contesti">
+          <p class="nota-titolo">
+            Contesti da spostare
+            <span class="testo-tenue">— scegli cosa organizzare, il resto resta dov'è</span>
+          </p>
+          {#if contesti.length > 0}
+            <div class="riga">
+              <Bottone
+                variante="fantasma"
+                dimensione="sm"
+                onclick={() => (contestiScelti = contesti.map((c) => c.etichetta))}
+              >
+                Tutti
+              </Bottone>
+              <Bottone
+                variante="fantasma"
+                dimensione="sm"
+                disabled={contestiScelti.length === 0}
+                onclick={() => (contestiScelti = [])}
+              >
+                Nessuno
+              </Bottone>
+            </div>
+          {/if}
+        </div>
+
         {#if contesti.length === 0}
           <p class="nota-testo">
-            Non c'è ancora nessun contesto: assegnali dalla sezione Revisione.
+            Non c'è ancora nessun contesto: assegnali dalla sezione Revisione, o
+            scrivi una regola qui sopra.
           </p>
         {:else}
           <div class="chip-riga">
@@ -499,18 +571,85 @@
                 onclick={() => commutaContesto(c.etichetta)}
               >
                 {c.etichetta}
-                <span class="conta cifre">{formattaNumero(c.quanti)}</span>
+                <span class="conta cifre">
+                  {formattaNumero(c.quanti)} · {formattaByte(c.byte)}
+                </span>
               </button>
             {/each}
           </div>
         {/if}
       </div>
 
+      <div class="destinazione">
+        <span class="tile-dest">
+          <Icona nome="cartella" dimensione={17} />
+        </span>
+        <div class="crescente">
+          <p class="etichetta-dest">Destinazione</p>
+          <p class="path-dest mono troncato" title={destinazione}>
+            {#if destinazione}
+              {accorciaPath(destinazione, 62)}
+            {:else if cercandoDestinazione}
+              sto guardando dove stanno già questi file…
+            {:else}
+              nessuna cartella da proporre
+            {/if}
+          </p>
+          <p class="nota-testo">
+            {#if destinazioneManuale}
+              L'hai scelta tu.
+            {:else if destinazionePredefinita}
+              Proposta da Setaccio: è la sorgente che contiene già la maggior
+              parte dei file di questi contesti, quindi quasi sempre è dove li
+              vuoi.
+            {:else}
+              L'indice non ha ancora niente da cui dedurla: scegli una cartella
+              a mano.
+            {/if}
+          </p>
+        </div>
+        <div class="azioni-dest">
+          <Bottone
+            variante="fantasma"
+            dimensione="sm"
+            icona="cartella"
+            onclick={scegliDestinazione}
+          >
+            Cambia cartella…
+          </Bottone>
+          {#if destinazioneManuale}
+            <Bottone
+              variante="fantasma"
+              dimensione="sm"
+              icona="aggiorna"
+              onclick={() => (destinazioneManuale = null)}
+            >
+              Ripristina la predefinita
+            </Bottone>
+          {/if}
+        </div>
+      </div>
+
+      {#if vociScelte.length > 0}
+        <AlberoContesti radice={destinazione} voci={vociScelte} />
+      {/if}
+
       <div class="riga-azione">
+        {#if contestiScelti.length === 0}
+          <span class="testo-piccolo testo-tenue">
+            Scegli almeno un contesto: senza selezione non c'è niente da spostare.
+          </span>
+        {:else}
+          <span class="testo-piccolo testo-tenue">
+            {formattaNumero(contestiScelti.length)}
+            {contestiScelti.length === 1 ? "contesto" : "contesti"},
+            {formattaNumero(fileScelti)} file da vagliare.
+          </span>
+        {/if}
         <Bottone
           variante="secondario"
           icona="lotti"
-          disabled={!destinazione.trim()}
+          disabled={contestiScelti.length === 0}
           caricamento={inCorso && !piano}
           onclick={preparaOrganizza}
         >
@@ -524,7 +663,7 @@
           {esito}
           {inCorso}
           testoConferma="Sposta i file"
-          spiegazione="Le mosse spostano i file sotto la cartella di destinazione, una sottocartella per contesto. Niente viene sovrascritto: se a destinazione c'è già un file con quel nome la mossa viene saltata e te lo diciamo."
+          spiegazione="Le mosse spostano i file sotto la cartella di destinazione, una cartella per contesto: se il contesto ha una barra — «lavoro/PAM» — diventano cartelle annidate. Niente viene sovrascritto: se a destinazione c'è già un file con quel nome la mossa viene saltata e te lo diciamo."
           onconferma={eseguiOrganizza}
           onchiudi={() => {
             piano = null;
@@ -836,15 +975,54 @@
     flex: 0 0 auto;
   }
 
+  .zona-form {
+    padding: 0 var(--sp-4);
+  }
+
   /* Organizza ------------------------------------------------------------ */
   .destinazione {
     display: flex;
-    align-items: flex-end;
-    gap: var(--sp-2);
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    border-radius: var(--raggio-lg);
+    background: var(--superficie-2);
+    min-width: 0;
   }
 
-  .destinazione :global(.campo) {
-    flex: 1 1 auto;
+  .tile-dest {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    border-radius: var(--raggio);
+    background: var(--superficie);
+    color: var(--accento-testo);
+  }
+
+  .etichetta-dest {
+    font-size: var(--micro);
+    font-weight: var(--peso-forte);
+    color: var(--testo-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .path-dest {
+    margin-top: 2px;
+    font-size: var(--piccolo);
+    font-weight: var(--peso-forte);
+    color: var(--testo);
+  }
+
+  .azioni-dest {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--sp-1);
+    flex: 0 0 auto;
   }
 
   .scelta-contesti {
@@ -853,9 +1031,32 @@
     gap: var(--sp-2);
   }
 
+  .capo-contesti {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
   .riga-azione {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 820px) {
+    .destinazione {
+      flex-wrap: wrap;
+    }
+
+    .azioni-dest {
+      align-items: flex-start;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
   }
 
   .allarme {

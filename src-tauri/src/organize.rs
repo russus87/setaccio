@@ -274,13 +274,102 @@ fn motivo_quarantena(db: &Db, f: &crate::types::FileRecord) -> Result<String> {
     }
 }
 
+/// Traduce un contesto in un percorso relativo sicuro.
+///
+/// I contesti sono gerarchici (`lavoro/PAM` diventa `lavoro/` con dentro
+/// `PAM/`), quindi il separatore va onorato — ma proprio per questo il valore
+/// non può essere concatenato alla cieca: `join` con un path assoluto scarta
+/// la radice (`radice.join("/etc")` è `/etc`), e un `..` risalirebbe fuori
+/// dalla cartella scelta. I contesti li scrive l'utente nelle regole, quindi
+/// qui si accettano solo segmenti normali e non vuoti.
+pub fn contesto_sicuro(contesto: &str) -> Option<PathBuf> {
+    let grezzo = contesto.trim().replace('\\', "/");
+    if grezzo.is_empty() {
+        return None;
+    }
+    let mut p = PathBuf::new();
+    let mut segmenti = 0usize;
+    for seg in grezzo.split('/') {
+        let seg = seg.trim();
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        if seg == ".." {
+            return None;
+        }
+        // Un segmento non deve poter reintrodurre un separatore o un prefisso
+        // di unità per vie traverse.
+        if seg.contains(':') || seg.contains('\0') {
+            return None;
+        }
+        p.push(seg);
+        segmenti += 1;
+        // Un contesto profondo dieci livelli è un errore di scrittura, non
+        // un'intenzione.
+        if segmenti > 8 {
+            return None;
+        }
+    }
+    if segmenti == 0 {
+        None
+    } else {
+        Some(p)
+    }
+}
+
+/// Cartella proposta come destinazione per i contesti indicati: la sorgente
+/// che contiene già la maggior parte di quei file.
+///
+/// Chiedere all'utente di cercare a mano una cartella che nel 99% dei casi è
+/// la sorgente stessa è attrito inutile: la si propone, resta modificabile.
+pub fn destinazione_suggerita(db: &Db, contesti: &[String]) -> Result<Option<String>> {
+    let conn = db.conn();
+    let (filtro, args): (String, Vec<String>) = if contesti.is_empty() {
+        (String::new(), Vec::new())
+    } else {
+        let segnaposto = std::iter::repeat("?")
+            .take(contesti.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        (
+            format!("AND f.contesto IN ({segnaposto})"),
+            contesti.to_vec(),
+        )
+    };
+    let sql = format!(
+        "SELECT s.path, COUNT(*) AS quanti
+           FROM file f JOIN sorgenti s ON s.id = f.sorgente_id
+          WHERE f.tipo <> 'artefatto' {filtro}
+          GROUP BY s.path
+          ORDER BY quanti DESC, s.path
+          LIMIT 1"
+    );
+    let p: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a as &dyn rusqlite::ToSql).collect();
+    let mut st = conn.prepare(&sql)?;
+    let v = st
+        .query_row(p.as_slice(), |r| r.get::<_, String>(0))
+        .optional()?;
+    Ok(v)
+}
+
 /// Prepara il piano della modalità Organizza: i file dei contesti indicati
 /// vengono spostati sotto `destinazione/<contesto>/`.
+///
+/// Se `destinazione` è vuota si usa la sorgente che contiene già la maggior
+/// parte di quei file.
 pub fn piano_organizza(db: &Db, destinazione: &str, contesti: &[String]) -> Result<PianoOperazioni> {
     if contesti.is_empty() {
         return Ok(assembla(nuovo_batch(db)?, Vec::new(), &[]));
     }
-    let radice = PathBuf::from(destinazione);
+    let scelta = if destinazione.trim().is_empty() {
+        destinazione_suggerita(db, contesti)?.unwrap_or_default()
+    } else {
+        destinazione.to_string()
+    };
+    if scelta.trim().is_empty() {
+        bail!("nessuna destinazione indicata e nessuna sorgente da cui dedurne una");
+    }
+    let radice = PathBuf::from(&scelta);
 
     let file = {
         let conn = db.conn();
@@ -320,7 +409,22 @@ pub fn piano_organizza(db: &Db, destinazione: &str, contesti: &[String]) -> Resu
     for (id, path, nome, size, contesto) in file {
         dimensioni.push((id, size));
         let origine = PathBuf::from(&path);
-        let destinazione = radice.join(&contesto).join(&nome);
+        let Some(relativo) = contesto_sicuro(&contesto) else {
+            mosse.push(Mossa {
+                file_id: id,
+                origine: path,
+                destinazione: String::new(),
+                genere: "sposta".into(),
+                motivo: format!("contesto «{contesto}»"),
+                eseguibile: false,
+                avviso: Some(format!(
+                    "il contesto «{contesto}» non è un percorso valido: userebbe «..», \
+                     un path assoluto o un carattere non ammesso"
+                )),
+            });
+            continue;
+        };
+        let destinazione = radice.join(&relativo).join(&nome);
         let dest_txt = destinazione.to_string_lossy().into_owned();
 
         let mut eseguibile = true;
@@ -828,5 +932,83 @@ mod test {
             .unwrap();
         let b2 = nuovo_batch(&db).unwrap();
         assert_ne!(b1, b2);
+    }
+
+    #[test]
+    fn il_contesto_gerarchico_diventa_cartelle_annidate() {
+        assert_eq!(
+            contesto_sicuro("lavoro/PAM"),
+            Some(PathBuf::from("lavoro").join("PAM"))
+        );
+        assert_eq!(contesto_sicuro("studio"), Some(PathBuf::from("studio")));
+        // Separatori ripetuti o spazi attorno non devono generare segmenti vuoti.
+        assert_eq!(
+            contesto_sicuro(" lavoro // DevOps "),
+            Some(PathBuf::from("lavoro").join("DevOps"))
+        );
+    }
+
+    #[test]
+    fn il_contesto_non_puo_uscire_dalla_destinazione() {
+        // `radice.join("/etc")` in Rust vale `/etc`: senza guardia un contesto
+        // assoluto scriverebbe fuori dalla cartella scelta dall'utente.
+        assert_eq!(contesto_sicuro("/etc"), Some(PathBuf::from("etc")));
+        assert_eq!(contesto_sicuro("../../fuori"), None);
+        assert_eq!(contesto_sicuro("lavoro/../../fuori"), None);
+        assert_eq!(contesto_sicuro("C:/Windows"), None);
+        assert_eq!(contesto_sicuro(""), None);
+        assert_eq!(contesto_sicuro("   "), None);
+        assert_eq!(contesto_sicuro("a/b/c/d/e/f/g/h/i/j"), None);
+    }
+
+    #[test]
+    fn la_destinazione_proposta_e_la_sorgente_piu_popolata() {
+        let db = Db::in_memoria().unwrap();
+        let poco = db
+            .sorgente_aggiungi("/tmp/poco", crate::types::Fascia::Documenti)
+            .unwrap();
+        let molto = db
+            .sorgente_aggiungi("/tmp/molto", crate::types::Fascia::Documenti)
+            .unwrap();
+
+        let inserisci = |sorgente: i64, n: usize, contesto: &str| {
+            for i in 0..n {
+                let f = crate::db::FileVisto {
+                    path: format!("/tmp/s{sorgente}/f{i}.pdf"),
+                    nome: format!("f{i}.pdf"),
+                    ext: Some("pdf".into()),
+                    size: 10,
+                    mtime: 1,
+                    tipo: crate::types::Tipo::Documento,
+                    motivo_tipo: "test".into(),
+                    contesto: Some(contesto.into()),
+                    motivo_contesto: None,
+                    sorgente_id: sorgente,
+                    archivio_padre: None,
+                    lotto: None,
+                };
+                db.file_upsert(&f).unwrap();
+            }
+        };
+        inserisci(poco, 1, "lavoro/PAM");
+        inserisci(molto, 5, "lavoro/PAM");
+
+        let suggerita = destinazione_suggerita(&db, &["lavoro/PAM".to_string()]).unwrap();
+        assert_eq!(suggerita.as_deref(), Some("/tmp/molto"));
+    }
+
+    #[test]
+    fn la_migrazione_rende_gerarchici_i_contesti_esistenti() {
+        let db = Db::in_memoria().unwrap();
+        let regole = db.regole().unwrap();
+        // Nessuna regola di serie deve più usare il trattino.
+        assert!(
+            regole.iter().all(|r| !r.valore.starts_with("lavoro-")),
+            "le regole builtin devono usare la forma gerarchica"
+        );
+        assert!(
+            regole.iter().any(|r| r.valore == "lavoro/PAM"),
+            "atteso il contesto lavoro/PAM fra le regole di serie"
+        );
     }
 }

@@ -176,6 +176,13 @@ fn regola_aggiungi(
     Ok(id)
 }
 
+/// Quanti file dell'indice colpirebbe un pattern, con qualche esempio. Serve
+/// a scrivere una regola sapendo cosa fa, invece di scoprirlo dopo.
+#[tauri::command]
+fn regola_stima(stato: tauri::State<'_, Stato0>, pattern: String) -> Esito<(i64, Vec<String>)> {
+    classify::stima_pattern(&stato.db, &pattern).map_err(err)
+}
+
 #[tauri::command]
 fn regola_elimina(stato: tauri::State<'_, Stato0>, id: i64) -> Esito<()> {
     stato.db.regola_elimina(id).map_err(err)?;
@@ -224,6 +231,14 @@ fn operazioni_annulla(stato: tauri::State<'_, Stato0>, batch: String) -> Esito<E
 #[tauri::command]
 fn organizza_piano(stato: tauri::State<'_, Stato0>, destinazione: String, contesti: Vec<String>) -> Esito<PianoOperazioni> {
     organize::piano_organizza(&stato.db, &destinazione, &contesti).map_err(err)
+}
+
+/// Cartella da proporre come destinazione: la sorgente che contiene già la
+/// maggior parte dei file di quei contesti. Evita all'utente di cercare a mano
+/// una cartella che quasi sempre è la sorgente stessa.
+#[tauri::command]
+fn organizza_destinazione(stato: tauri::State<'_, Stato0>, contesti: Vec<String>) -> Esito<Option<String>> {
+    organize::destinazione_suggerita(&stato.db, &contesti).map_err(err)
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +322,7 @@ pub fn run() {
             coda_revisione,
             regole_lista,
             regola_aggiungi,
+            regola_stima,
             regola_elimina,
             regola_attiva,
             duplicati,
@@ -315,6 +331,7 @@ pub fn run() {
             operazioni_batch,
             operazioni_annulla,
             organizza_piano,
+            organizza_destinazione,
             lotti,
             lotto_dettaglio,
             layout_detect,
