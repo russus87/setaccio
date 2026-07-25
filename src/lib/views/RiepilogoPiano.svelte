@@ -34,6 +34,18 @@
      * grande sembrerebbe un'operazione inutile invece che una di riordino.
      */
     mostraSpazio?: boolean;
+    /**
+     * L'operazione perde qualcosa: la nota diventa rossa e il bottone di
+     * conferma smette di essere quello «primario» verde, che qui vorrebbe
+     * dire la cosa sbagliata.
+     */
+    pericolo?: boolean;
+    /**
+     * Parola da digitare per sbloccare la conferma. Va usata solo per ciò che
+     * non si può disfare: un attrito messo dove non serve insegna a
+     * ignorarlo, e allora non protegge più dove serve davvero.
+     */
+    parolaChiave?: string;
     onconferma: () => void;
     onchiudi: () => void;
   }
@@ -45,12 +57,28 @@
     spiegazione = "I file non vengono cancellati: vengono spostati in quarantena, e ogni batch resta annullabile.",
     testoConferma = "Conferma ed esegui",
     mostraSpazio = true,
+    pericolo = false,
+    parolaChiave,
     onconferma,
     onchiudi,
   }: Props = $props();
 
   const saltate = $derived(piano.mosse.filter((m) => !m.eseguibile));
   const eseguibili = $derived(piano.mosse.filter((m) => m.eseguibile));
+
+  /** Quanto l'utente ha digitato nella casella della parola chiave. */
+  let digitato = $state("");
+
+  // Cambiando piano la conferma riparte da zero: la parola digitata per il
+  // piano precedente non deve sbloccare quello nuovo.
+  $effect(() => {
+    void piano.batch;
+    digitato = "";
+  });
+
+  const sbloccato = $derived(
+    !parolaChiave || digitato.trim().toUpperCase() === parolaChiave.toUpperCase(),
+  );
 
   /** Le mosse saltate raggruppate per avviso: gli errori si ripetono. */
   const motiviSaltate = $derived.by(() => {
@@ -79,13 +107,20 @@
 
   <div class="impila">
     {#if esito}
-      <div class="nota successo">
-        <Icona nome="check" dimensione={16} />
+      <div class="nota" class:successo={!pericolo} class:pericolo>
+        <Icona nome={pericolo ? "info" : "check"} dimensione={16} />
         <p>
           {formattaNumero(esito.eseguite)} mosse eseguite,
           {formattaNumero(esito.fallite)} fallite. Batch
-          <span class="mono">{esito.batch}</span>: puoi annullarlo dall'elenco
-          dei batch.
+          <span class="mono">{esito.batch}</span>:
+          <!-- Promettere un annulla che non esiste è peggio che non averlo:
+               qui si dice dove cercare, o che non c'è più niente da cercare. -->
+          {#if pericolo}
+            resta nell'elenco come traccia di cosa è stato tolto, ma da qui non
+            si torna indietro.
+          {:else}
+            puoi annullarlo dall'elenco dei batch.
+          {/if}
         </p>
       </div>
 
@@ -119,8 +154,8 @@
         {/if}
       </div>
 
-      <div class="nota">
-        <Icona nome="info" dimensione={16} />
+      <div class="nota" class:pericolo>
+        <Icona nome={pericolo ? "avviso" : "info"} dimensione={16} />
         <p>{spiegazione}</p>
       </div>
 
@@ -172,13 +207,28 @@
         </div>
       {/if}
 
+      {#if parolaChiave && piano.eseguibili > 0}
+        <label class="lucchetto">
+          <span class="titolo-blocco">
+            Scrivi «{parolaChiave}» per sbloccare la conferma
+          </span>
+          <input
+            bind:value={digitato}
+            placeholder={parolaChiave}
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Scrivi {parolaChiave} per confermare"
+          />
+        </label>
+      {/if}
+
       <div class="piede">
         <Bottone variante="secondario" onclick={onchiudi}>Annulla</Bottone>
         <Bottone
-          variante="primario"
-          icona="check"
+          variante={pericolo ? "pericolo" : "primario"}
+          icona={pericolo ? "cestino" : "check"}
           caricamento={inCorso}
-          disabled={piano.eseguibili === 0}
+          disabled={piano.eseguibili === 0 || !sbloccato}
           onclick={onconferma}
         >
           {testoConferma}
@@ -235,6 +285,37 @@
   .nota.successo {
     background: var(--successo-bg);
     color: var(--successo);
+  }
+
+  .nota.pericolo {
+    background: var(--pericolo-bg);
+    color: var(--pericolo);
+  }
+
+  /* Il lucchetto della conferma testuale ------------------------------- */
+  .lucchetto {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .lucchetto input {
+    width: 100%;
+    max-width: 260px;
+    height: 38px;
+    padding: 0 var(--sp-3);
+    border-radius: var(--raggio);
+    border: 1px solid var(--pericolo);
+    background: var(--superficie);
+    color: var(--testo);
+    font-family: var(--famiglia-mono);
+    font-size: var(--corpo);
+    letter-spacing: 0.08em;
+  }
+
+  .lucchetto input:focus-visible {
+    outline: 2px solid var(--pericolo);
+    outline-offset: 1px;
   }
 
   .blocco {

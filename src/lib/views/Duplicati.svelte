@@ -1,26 +1,22 @@
 <script lang="ts">
   /**
-   * Gruppi di file con contenuto identico, e il modo sicuro per liberarne lo
-   * spazio.
+   * Gruppi di file con contenuto identico, e i modi per liberarne lo spazio.
    *
-   * Il patto con l'utente è che niente sparisce: si seleziona, si guarda il
-   * piano, si conferma, e i file finiscono in quarantena. Ogni batch resta
-   * annullabile finché non lo si svuota a mano.
+   * Il patto con l'utente è che niente sparisce *di soppiatto*: si seleziona,
+   * si guarda il piano, si conferma. Dove finiscono i file lo decide lui —
+   * quarantena, cestino di sistema o cancellazione — e le tre strade sono
+   * tenute a distanze diverse apposta, perché non si disfano allo stesso modo.
    */
   import { openPath } from "@tauri-apps/plugin-opener";
   import {
     duplicati,
-    duplicatiPiano,
     formattaByte,
     formattaDataOra,
     formattaNumero,
     operazioniAnnulla,
     operazioniBatch,
-    operazioniEsegui,
     type Batch,
-    type EsitoOperazioni,
     type GruppoDuplicati,
-    type PianoOperazioni,
   } from "../api";
   import Badge from "../ui/Badge.svelte";
   import Bottone from "../ui/Bottone.svelte";
@@ -29,6 +25,7 @@
   import Vuoto from "../ui/Vuoto.svelte";
   import RiepilogoPiano from "./RiepilogoPiano.svelte";
   import RigaFile from "./RigaFile.svelte";
+  import { AzioniFile, AZIONI, type GenereAzione } from "./azioni.svelte";
   import { messaggioErrore } from "./comuni";
 
   interface Props {
@@ -45,10 +42,12 @@
   let ricarica = $state(0);
 
   let scelti = $state<number[]>([]);
-  let piano = $state<PianoOperazioni | null>(null);
-  let esito = $state<EsitoOperazioni | null>(null);
-  let inCorso = $state(false);
   let annullando = $state<string | null>(null);
+
+  const azioni = new AzioniFile(() => {
+    scelti = [];
+    ricarica += 1;
+  });
 
   $effect(() => {
     void aggiornamento;
@@ -105,32 +104,8 @@
     scelti = gruppi.flatMap((g) => g.duplicati.map((d) => d.id));
   }
 
-  async function preparaPiano() {
-    if (scelti.length === 0) return;
-    inCorso = true;
-    esito = null;
-    try {
-      piano = await duplicatiPiano([...scelti]);
-      errore = null;
-    } catch (e) {
-      errore = messaggioErrore(e);
-    } finally {
-      inCorso = false;
-    }
-  }
-
-  async function esegui() {
-    if (!piano) return;
-    inCorso = true;
-    try {
-      esito = await operazioniEsegui(piano);
-      scelti = [];
-      ricarica += 1;
-    } catch (e) {
-      errore = messaggioErrore(e);
-    } finally {
-      inCorso = false;
-    }
+  function avvia(genere: GenereAzione) {
+    void azioni.prepara(genere, scelti);
   }
 
   async function annulla(codice: string) {
@@ -155,43 +130,45 @@
 </script>
 
 <div class="impila">
-  <!-- Il patto: niente viene cancellato ------------------------------- -->
+  <!-- Il patto: niente parte senza che tu l'abbia visto --------------- -->
   <Card padding="stretta">
     <div class="patto">
       <span class="patto-icona"><Icona nome="archivio" dimensione={18} /></span>
       <div class="crescente">
-        <p class="patto-titolo">Setaccio non cancella niente</p>
+        <p class="patto-titolo">Niente parte senza che tu abbia visto il piano</p>
         <p class="patto-testo">
-          I file selezionati vengono <strong>spostati in quarantena</strong>, in
-          una cartella dedicata dentro i dati dell'applicazione. Restano lì, con
-          il percorso originale ricostruibile, finché non decidi tu. Ogni
-          operazione è raccolta in un batch che puoi annullare in blocco.
+          Le copie ridondanti si possono <strong>mettere in quarantena</strong>
+          — spostate in una cartella dedicata, con il percorso originale
+          ricostruibile e il batch annullabile in blocco —, oppure
+          <strong>mandare nel cestino</strong> di sistema, o
+          <strong>cancellare</strong>. Le ultime due liberano spazio subito ma
+          non si disfano da qui: la scelta è tua e il piano te la mostra prima.
+          Il <strong>canonico non si tocca mai</strong>.
         </p>
       </div>
     </div>
   </Card>
 
-  {#if errore}
+  {#if errore || azioni.errore}
     <Card>
       <div class="allarme" role="alert">
         <Icona nome="avviso" dimensione={16} />
-        <span>{errore}</span>
+        <span>{errore ?? azioni.errore}</span>
       </div>
     </Card>
   {/if}
 
-  {#if piano}
+  {#if azioni.piano}
     <RiepilogoPiano
-      {piano}
-      {esito}
-      {inCorso}
-      testoConferma="Metti in quarantena"
-      spiegazione="I file non vengono cancellati: vengono spostati nella cartella di quarantena. Se qualcosa non torna, annulla il batch dall'elenco qui sotto e tornano al loro posto."
-      onconferma={esegui}
-      onchiudi={() => {
-        piano = null;
-        esito = null;
-      }}
+      piano={azioni.piano}
+      esito={azioni.esito}
+      inCorso={azioni.inCorso}
+      testoConferma={azioni.descrizione.conferma}
+      spiegazione={azioni.descrizione.spiegazione}
+      pericolo={azioni.descrizione.pericolo}
+      parolaChiave={azioni.descrizione.parolaChiave}
+      onconferma={() => azioni.esegui()}
+      onchiudi={() => azioni.chiudi()}
     />
   {/if}
 
@@ -237,12 +214,32 @@
           {/if}
           <Bottone
             variante="secondario"
+            dimensione="sm"
             icona="archivio"
             disabled={scelti.length === 0}
-            caricamento={inCorso && !piano}
-            onclick={preparaPiano}
+            caricamento={azioni.inCorso && !azioni.piano}
+            onclick={() => avvia("quarantena")}
           >
-            Prepara il piano
+            {AZIONI.quarantena.bottone}
+          </Bottone>
+          <Bottone
+            variante="secondario"
+            dimensione="sm"
+            icona="cestino"
+            disabled={scelti.length === 0}
+            onclick={() => avvia("cestino")}
+          >
+            {AZIONI.cestino.bottone}
+          </Bottone>
+          <Bottone
+            variante="pericolo"
+            dimensione="sm"
+            icona="cestino"
+            titolo="Cancella dal disco senza passare dal cestino"
+            disabled={scelti.length === 0}
+            onclick={() => avvia("elimina")}
+          >
+            {AZIONI.elimina.bottone}
           </Bottone>
         </div>
       </div>
@@ -337,7 +334,7 @@
   <!-- Cronologia dei batch --------------------------------------------- -->
   <Card
     titolo="Operazioni eseguite"
-    sottotitolo="Ogni batch è annullabile: i file tornano al percorso di origine"
+    sottotitolo="Gli spostamenti si annullano e i file tornano al loro posto; cestino ed eliminazione restano qui solo come traccia"
     padding="nessuna"
   >
     <div class="elenco-batch">
@@ -351,8 +348,15 @@
       {:else}
         {#each batch as b (b.batch)}
           <div class="riga-batch" class:annullato={b.annullato}>
-            <span class="tile-batch">
-              <Icona nome={b.annullato ? "aggiorna" : "archivio"} dimensione={16} />
+            <span class="tile-batch" class:definitivo={!b.annullabile}>
+              <Icona
+                nome={!b.annullabile
+                  ? "cestino"
+                  : b.annullato
+                    ? "aggiorna"
+                    : "archivio"}
+                dimensione={16}
+              />
             </span>
             <div class="crescente">
               <p class="mono troncato">{b.batch}</p>
@@ -361,7 +365,17 @@
                 {b.quante === 1 ? "mossa" : "mosse"} · {formattaDataOra(b.eseguito_il)}
               </p>
             </div>
-            {#if b.annullato}
+            <!-- Un pulsante Annulla che fallirebbe è peggio della sua
+                 assenza: qui si dice dove cercare, o che non c'è più nulla
+                 da cercare. -->
+            {#if !b.annullabile}
+              <Badge
+                testo={b.genere === "cestino"
+                  ? "nel cestino di sistema"
+                  : "eliminato"}
+                variante={b.genere === "cestino" ? "avviso" : "pericolo"}
+              />
+            {:else if b.annullato}
               <Badge testo="annullato" variante="neutro" />
             {:else}
               <Bottone
@@ -556,6 +570,13 @@
     border-radius: var(--raggio-sm);
     background: var(--superficie-2);
     color: var(--testo-2);
+  }
+
+  /* I batch da cui non si torna indietro si riconoscono dalla riga, non
+     solo dalla pillola in fondo. */
+  .tile-batch.definitivo {
+    background: var(--pericolo-bg);
+    color: var(--pericolo);
   }
 
   .allarme {

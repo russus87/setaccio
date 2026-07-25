@@ -174,6 +174,10 @@ pub struct Filtri {
     pub size_max: Option<i64>,
     /// Include i file classificati `artefatto`, esclusi di default.
     pub includi_artefatti: bool,
+    /// `rilevanza` (predefinito) | `dimensione` | `recenti` | `vecchi` | `nome`.
+    /// Un valore non riconosciuto vale come predefinito: un ordinamento
+    /// sbagliato non deve far fallire una ricerca.
+    pub ordine: Option<String>,
     pub limite: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -257,7 +261,9 @@ pub struct Mossa {
     pub file_id: i64,
     pub origine: String,
     pub destinazione: String,
-    /// `quarantena` | `sposta`
+    /// `quarantena` | `sposta` | `rimuovi_cartella` | `cestino` | `elimina`.
+    /// Gli ultimi due non hanno destinazione e non sono annullabili da qui:
+    /// vedi [`crate::cestino`].
     pub genere: String,
     pub motivo: String,
     /// Falso quando la mossa verrebbe saltata (destinazione occupata,
@@ -290,6 +296,10 @@ pub struct Batch {
     pub quante: i64,
     pub eseguito_il: i64,
     pub annullato: bool,
+    /// Falso per i batch che hanno consegnato i file al cestino di sistema o
+    /// li hanno cancellati: da Setaccio non si torna indietro, e l'elenco dei
+    /// batch deve dirlo invece di offrire un pulsante che fallirebbe.
+    pub annullabile: bool,
 }
 
 /// Avanzamento della scansione, emesso come evento `scan://progresso`.
@@ -327,6 +337,41 @@ pub struct Statistiche {
     pub per_tipo: Vec<ConteggioEtichetta>,
     pub per_contesto: Vec<ConteggioEtichetta>,
     pub ultima_scansione: Option<i64>,
+}
+
+/// Una cartella con quanto pesa l'albero che ha sotto.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CartellaPesante {
+    pub path: String,
+    /// Ultimo segmento del percorso: è quello che si legge nella lista.
+    pub nome: String,
+    /// Byte di tutto ciò che sta sotto, sottocartelle comprese.
+    pub byte: i64,
+    pub quanti: i64,
+    /// Byte dei soli file che stanno direttamente dentro questa cartella.
+    /// La differenza con `byte` dice se il peso è qui o più in basso.
+    pub byte_diretti: i64,
+    /// Quanti separatori ha il percorso: serve alla UI per rientrare le
+    /// cartelle annidate invece di mostrarle tutte allo stesso livello.
+    pub profondita: usize,
+}
+
+/// Dati della vista Ingombro: dove sono finiti i gigabyte.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Ingombro {
+    /// I file più grandi che passano i filtri, dal più pesante.
+    pub file: Vec<FileRecord>,
+    /// Le cartelle più pesanti, già sfoltite dei passaggi che non aggiungono
+    /// nulla rispetto al padre.
+    pub cartelle: Vec<CartellaPesante>,
+    pub per_estensione: Vec<ConteggioEtichetta>,
+    pub per_tipo: Vec<ConteggioEtichetta>,
+    /// Totali su *tutto* ciò che passa i filtri, non solo su quanto è in `file`.
+    pub byte_totali: i64,
+    pub quanti_totali: i64,
+    /// Byte dei soli file elencati in `file`: serve a dire «i primi 50
+    /// pesano il 60% del totale», che è l'informazione che fa agire.
+    pub byte_mostrati: i64,
 }
 
 /// Riga della coda di revisione: un file che le regole non hanno saputo

@@ -25,6 +25,7 @@
   import Dashboard from "./lib/views/Dashboard.svelte";
   import Duplicati from "./lib/views/Duplicati.svelte";
   import Impostazioni from "./lib/views/Impostazioni.svelte";
+  import Ingombro from "./lib/views/Ingombro.svelte";
   import Lotti from "./lib/views/Lotti.svelte";
   import Novita from "./lib/views/Novita.svelte";
   import Revisione from "./lib/views/Revisione.svelte";
@@ -196,6 +197,8 @@
           <Ricerca query={queryConfermata} bozza={ricerca} />
         {:else if sezione === "novita"}
           <Novita aggiornamento={fineScansione} />
+        {:else if sezione === "ingombro"}
+          <Ingombro aggiornamento={fineScansione} />
         {:else if sezione === "duplicati"}
           <Duplicati aggiornamento={fineScansione} />
         {:else if sezione === "lotti"}

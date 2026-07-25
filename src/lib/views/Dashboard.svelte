@@ -142,9 +142,10 @@
         <StatTile
           etichetta="Spazio indicizzato"
           valore={formattaByte(dati.byte_totali)}
-          icona="archivio"
+          icona="ingombro"
           tono="archivio"
-          periodo="somma delle dimensioni sul disco"
+          periodo="apri per vedere dove sta il peso"
+          onclick={() => onnaviga("ingombro")}
         />
       </div>
 

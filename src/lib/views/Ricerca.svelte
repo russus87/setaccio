@@ -20,9 +20,11 @@
     formattaByte,
     formattaData,
     formattaNumero,
+    ORDINI,
     STATI,
     TIPI,
     type Anteprima,
+    type Ordine,
     type ConteggioEtichetta,
     type FileRecord,
     type Filtri,
@@ -73,6 +75,16 @@
   let sizeMinMb = $state("");
   let sizeMaxMb = $state("");
   let includiArtefatti = $state(false);
+  let ordine = $state<Ordine>("rilevanza");
+
+  /**
+   * Sulla ricerca per nome non c'è nessun punteggio da cui ricavare una
+   * rilevanza: la scelta resta quella dell'utente — così tornando al
+   * contenuto la ritrova — ma quello che parte è la data.
+   */
+  const ordineEffettivo = $derived<Ordine>(
+    modalita === "nome" && ordine === "rilevanza" ? "recenti" : ordine,
+  );
 
   const LIMITE = 200;
 
@@ -97,6 +109,7 @@
     size_min: numeroByte(sizeMinMb),
     size_max: numeroByte(sizeMaxMb),
     includi_artefatti: includiArtefatti,
+    ordine: ordineEffettivo,
     limite: LIMITE,
   });
 
@@ -417,6 +430,23 @@
             >
               Nel nome
             </button>
+          </div>
+
+          <div class="modi" role="group" aria-label="Ordine dei risultati">
+            {#each ORDINI as o (o.id)}
+              <button
+                class="modo"
+                class:acceso={ordineEffettivo === o.id}
+                aria-pressed={ordineEffettivo === o.id}
+                disabled={o.id === "rilevanza" && modalita === "nome"}
+                title={o.id === "rilevanza" && modalita === "nome"
+                  ? "Cercando nel nome non c'è un punteggio da cui ricavare la rilevanza"
+                  : undefined}
+                onclick={() => (ordine = o.id)}
+              >
+                {o.etichetta}
+              </button>
+            {/each}
           </div>
 
           <p class="conteggio-risultati testo-piccolo testo-secondario">
@@ -773,6 +803,12 @@
     border-radius: var(--raggio-pillola);
     background: var(--superficie-2);
     border: 1px solid var(--bordo);
+    flex-wrap: wrap;
+  }
+
+  .modo:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .modo {

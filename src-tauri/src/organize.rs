@@ -1,18 +1,25 @@
-//! Operazioni sul filesystem — l'unico modulo che tocca il disco.
+//! Operazioni sul filesystem che spostano — piani, esecuzione e undo.
 //!
 //! Regole non negoziabili, in ordine di importanza:
-//! 1. Mai `rm`. I file vanno in quarantena, non nel nulla.
+//! 1. Qui dentro non si cancella. I file vanno in quarantena, non nel nulla.
 //! 2. Mai sovrascrivere: se la destinazione è occupata la mossa viene saltata,
 //!    non risolta d'ufficio.
 //! 3. Ogni mossa finisce nel journal, così l'undo è sempre possibile.
 //! 4. Il piano si vede prima. Nessuna operazione parte senza che l'utente
 //!    abbia visto l'elenco completo di cosa sta per succedere.
 //!
-//! Conseguenza diretta della regola 1: qui dentro non compare **mai** una
-//! `std::fs::remove_*`, nemmeno nei test. L'unica primitiva usata è
+//! Conseguenza diretta della regola 1: in questo modulo non compare **mai**
+//! una `std::fs::remove_file`, nemmeno nei test. L'unica primitiva usata è
 //! `std::fs::rename`, che è atomica e reversibile. È anche il motivo per cui
 //! una mossa fra filesystem diversi non viene eseguita: `rename` fallirebbe
 //! con `EXDEV` e l'alternativa (copia + cancellazione) violerebbe la regola 1.
+//!
+//! Cestino e cancellazione definitiva esistono — l'utente li ha chiesti — ma
+//! vivono in [`crate::cestino`], che è l'unico posto in cui si perde qualcosa.
+//! [`esegui`] resta il punto d'ingresso unico e smista le mosse per genere,
+//! così esiste una sola strada dal piano al disco; ma la garanzia «leggendo
+//! questo file si vede che non cancella» resta vera, ed è il motivo per cui i
+//! due moduli sono separati.
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, OptionalExtension};
@@ -139,7 +146,7 @@ fn avviso_filesystem(origine: &Path, destinazione: &Path) -> Option<String> {
 /// Niente valori casuali — il contatore si ricava dal journal, così due batch
 /// nello stesso secondo restano distinti e l'ordine alfabetico coincide con
 /// l'ordine cronologico.
-fn nuovo_batch(db: &Db) -> Result<String> {
+pub(crate) fn nuovo_batch(db: &Db) -> Result<String> {
     let prefisso = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
     let conn = db.conn();
     let usati: i64 = conn.query_row(
@@ -152,7 +159,11 @@ fn nuovo_batch(db: &Db) -> Result<String> {
 
 /// Assembla il piano a partire dalle mosse, contando eseguibili, saltate e
 /// spazio liberato. `dimensioni` associa a ogni `file_id` la sua dimensione.
-fn assembla(batch: String, mosse: Vec<Mossa>, dimensioni: &[(i64, i64)]) -> PianoOperazioni {
+pub(crate) fn assembla(
+    batch: String,
+    mosse: Vec<Mossa>,
+    dimensioni: &[(i64, i64)],
+) -> PianoOperazioni {
     let eseguibili = mosse.iter().filter(|m| m.eseguibile).count();
     let saltate = mosse.len() - eseguibili;
     let spazio_liberato = mosse
@@ -663,10 +674,11 @@ pub fn esegui(db: &Db, piano: &PianoOperazioni) -> Result<EsitoOperazioni> {
     let mut errori = Vec::new();
 
     for m in piano.mosse.iter().filter(|m| m.eseguibile) {
-        let esito = if m.genere == GENERE_CARTELLA {
-            rimuovi_cartella(db, &batch, m)
-        } else {
-            sposta(db, &batch, m)
+        let esito = match m.genere.as_str() {
+            GENERE_CARTELLA => rimuovi_cartella(db, &batch, m),
+            crate::cestino::GENERE_CESTINO => crate::cestino::nel_cestino(db, &batch, m),
+            crate::cestino::GENERE_ELIMINA => crate::cestino::elimina_definitivo(db, &batch, m),
+            _ => sposta(db, &batch, m),
         };
         match esito {
             Ok(()) => eseguite += 1,
@@ -707,15 +719,17 @@ pub fn batch_recenti(db: &Db) -> Result<Vec<Batch>> {
     )?;
     let v = st
         .query_map(params![BATCH_RECENTI_MAX], |r| {
+            let genere: String = r.get(1)?;
             Ok(Batch {
                 batch: r.get(0)?,
-                genere: r.get(1)?,
                 quante: r.get(2)?,
                 eseguito_il: r.get(3)?,
                 // Il batch si dice annullato solo quando *tutte* le sue mosse
                 // lo sono: un undo parziale deve restare visibile come da
                 // completare.
                 annullato: r.get::<_, i64>(4)? != 0,
+                annullabile: !crate::cestino::irreversibile(&genere),
+                genere,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -750,6 +764,20 @@ pub fn annulla(db: &Db, batch: &str) -> Result<EsitoOperazioni> {
     for (id, origine, destinazione, file_id, genere) in da_annullare {
         let orig = Path::new(&origine);
         let dest = Path::new(&destinazione);
+
+        // Un file consegnato al cestino o cancellato non lo si riporta
+        // indietro da qui, e la riga di journal non va marcata come annullata:
+        // resterebbe scritto che l'operazione è stata disfatta quando non lo è.
+        // Lo si dice, una volta per mossa, con l'indicazione di dove cercare.
+        if crate::cestino::irreversibile(&genere) {
+            fallite += 1;
+            errori.push(if genere == crate::cestino::GENERE_CESTINO {
+                format!("{origine}: è nel cestino di sistema, recuperalo da lì")
+            } else {
+                format!("{origine}: cancellato definitivamente, non c'è modo di riportarlo")
+            });
+            continue;
+        }
 
         // Disfare la rimozione di una cartella vuota vuole dire ricrearla: è
         // un'operazione esatta, perché di quella cartella non c'era altro da

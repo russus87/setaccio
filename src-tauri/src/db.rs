@@ -261,7 +261,16 @@ impl Db {
 
     pub fn sorgente_rimuovi(&self, id: i64) -> Result<()> {
         let conn = self.conn();
-        // I file vanno via in cascata; l'FTS non ha foreign key, va ripulito a mano.
+        // I file vanno via in cascata; le tabelle FTS non hanno foreign key e
+        // vanno ripulite a mano, **prima** che la cascata porti via le righe
+        // da cui si ricavano i loro rowid.
+        conn.execute(
+            "DELETE FROM record_fts WHERE rowid IN (
+                 SELECT rt.id FROM record_tracciato rt
+                   JOIN file f ON f.id = rt.file_id
+                  WHERE f.sorgente_id = ?1)",
+            params![id],
+        )?;
         conn.execute(
             "DELETE FROM file_fts WHERE rowid IN (SELECT id FROM file WHERE sorgente_id = ?1)",
             params![id],
@@ -516,6 +525,17 @@ impl Db {
                 .flatten();
             let da_verificare = vero.unwrap_or(path);
             if !Path::new(&da_verificare).exists() {
+                // `record_tracciato` scende per cascata, ma `record_fts` no:
+                // le sue righe vanno tolte finché si sa ancora quali sono.
+                // Lasciarle orfane occuperebbe i rowid che il prossimo
+                // tracciato indicizzato si vedrebbe assegnare, e
+                // l'inserimento fallirebbe — cioè quel tracciato smetterebbe
+                // in silenzio di essere cercabile.
+                conn.execute(
+                    "DELETE FROM record_fts
+                      WHERE rowid IN (SELECT id FROM record_tracciato WHERE file_id = ?1)",
+                    params![id],
+                )?;
                 conn.execute("DELETE FROM file_fts WHERE rowid = ?1", params![id])?;
                 conn.execute("DELETE FROM file WHERE id = ?1", params![id])?;
                 tolti += 1;

@@ -6,6 +6,7 @@
     | "dashboard"
     | "ricerca"
     | "novita"
+    | "ingombro"
     | "duplicati"
     | "lotti"
     | "revisione"
@@ -42,6 +43,13 @@
       etichetta: "Novità",
       icona: "novita",
       descrizione: "Cos'è cambiato sul disco negli ultimi giorni",
+      gruppo: "principale",
+    },
+    {
+      id: "ingombro",
+      etichetta: "Ingombro",
+      icona: "ingombro",
+      descrizione: "I file e le cartelle che occupano più spazio",
       gruppo: "principale",
     },
     {

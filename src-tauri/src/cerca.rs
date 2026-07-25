@@ -45,7 +45,7 @@ fn query_fts(q: &str) -> Option<String> {
 }
 
 /// Costruisce la parte `WHERE` comune ai filtri componibili.
-fn clausole(filtri: &Filtri, cond: &mut Vec<String>, args: &mut Vec<Value>) {
+pub(crate) fn clausole(filtri: &Filtri, cond: &mut Vec<String>, args: &mut Vec<Value>) {
     let lista = |campo: &str, valori: &[String], cond: &mut Vec<String>, args: &mut Vec<Value>| {
         if !valori.is_empty() {
             let segnaposti = vec!["?"; valori.len()].join(",");
@@ -86,7 +86,13 @@ fn clausole(filtri: &Filtri, cond: &mut Vec<String>, args: &mut Vec<Value>) {
     }
     // Gli artefatti sono l'88% dei documenti su un disco di sviluppo: se
     // comparissero di default la ricerca sarebbe inutilizzabile.
-    if !filtri.includi_artefatti && filtri.tipi.is_empty() {
+    //
+    // L'esclusione dipende dalla scelta esplicita dell'utente — l'interruttore
+    // oppure il tipo `artefatto` chiesto per nome — e non dal fatto che ci
+    // siano altri filtri di tipo attivi: legarla a `tipi.is_empty()` rendeva
+    // l'interruttore inerte appena si sceglieva un tipo qualunque.
+    let chiesti_per_nome = filtri.tipi.iter().any(|t| t == "artefatto");
+    if !filtri.includi_artefatti && !chiesti_per_nome {
         cond.push("f.tipo <> 'artefatto'".into());
     }
 }
@@ -96,6 +102,23 @@ fn limite_offset(filtri: &Filtri) -> (i64, i64) {
         filtri.limite.unwrap_or(200).clamp(1, 2000),
         filtri.offset.unwrap_or(0).max(0),
     )
+}
+
+/// Clausola `ORDER BY` scelta dall'utente.
+///
+/// Restituisce sempre una costante compilata qui dentro, mai una stringa che
+/// arriva dal frontend: un `ORDER BY` non si può parametrizzare, quindi
+/// l'unico modo sicuro di renderlo scegliibile è una tabella chiusa.
+/// `predefinito` è ciò che la vista usa quando non è stato chiesto nulla —
+/// la rilevanza per il full-text, la data per la ricerca sul nome.
+pub(crate) fn ordinamento(filtri: &Filtri, predefinito: &'static str) -> &'static str {
+    match filtri.ordine.as_deref() {
+        Some("dimensione") => "f.size DESC, f.path",
+        Some("recenti") => "f.mtime DESC",
+        Some("vecchi") => "f.mtime ASC",
+        Some("nome") => "f.nome COLLATE NOCASE, f.path",
+        _ => predefinito,
+    }
 }
 
 /// Ricerca full-text su nome e testo estratto, con snippet evidenziato.
@@ -130,9 +153,10 @@ pub fn full_text(db: &Db, query: &str, filtri: &Filtri) -> Result<Vec<Risultato>
            FROM file_fts
            JOIN file f ON f.id = file_fts.rowid
           WHERE {}
-          ORDER BY punteggio
+          ORDER BY {}
           LIMIT ? OFFSET ?",
-        cond.join(" AND ")
+        cond.join(" AND "),
+        ordinamento(filtri, "punteggio")
     );
     // Il segnaposto di `instr` precede quelli della WHERE nell'ordine di
     // apparizione nella query, quindi va inserito in testa agli argomenti.
@@ -233,8 +257,9 @@ pub fn per_nome(db: &Db, query: &str, filtri: &Filtri) -> Result<Vec<FileRecord>
     let (lim, off) = limite_offset(filtri);
 
     let sql = format!(
-        "SELECT {COLONNE} FROM file f WHERE {} ORDER BY f.mtime DESC LIMIT ? OFFSET ?",
-        cond.join(" AND ")
+        "SELECT {COLONNE} FROM file f WHERE {} ORDER BY {} LIMIT ? OFFSET ?",
+        cond.join(" AND "),
+        ordinamento(filtri, "f.mtime DESC")
     );
     args.push(Value::Integer(lim));
     args.push(Value::Integer(off));

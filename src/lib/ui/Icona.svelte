@@ -8,6 +8,7 @@
     "dashboard",
     "ricerca",
     "novita",
+    "ingombro",
     "duplicati",
     "tracciati",
     "revisione",
@@ -100,6 +101,12 @@
   {:else if nome === "novita"}
     <circle cx="12" cy="12" r="8.5" />
     <path d="M12 7.2V12l3.2 2" />
+  {:else if nome === "ingombro"}
+    <!-- Una mappa ad aree: un blocco grande e due piccoli. Dice «quanto
+         occupa cosa» senza somigliare né a `dashboard` (quattro quadrati
+         uguali) né a `filtro` (righe decrescenti centrate). -->
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="M12.6 3v18M12.6 12H21" />
   {:else if nome === "duplicati"}
     <rect x="8.5" y="3.5" width="12" height="12" rx="3" />
     <path d="M15.5 19.2a2.3 2.3 0 0 1-2.3 1.3H6.5a3 3 0 0 1-3-3V9.8a2.3 2.3 0 0 1 1.3-2.3" />

@@ -22,6 +22,10 @@ Rust · Tauri 2 · Svelte 5
 - **Distingue i documenti dagli artefatti**: quello che c'è dentro un albero di
   codice sorgente non viene mescolato ai documenti veri.
 - **Trova i duplicati** confrontando l'hash del contenuto, non il nome.
+- **Dice dove sono finiti i gigabyte**: la sezione **Ingombro** mette accanto i
+  file più grandi, le **cartelle che pesano di più** e la ripartizione per
+  estensione. Da lì i file si mandano in quarantena, nel cestino di sistema o
+  si cancellano — sempre passando dall'anteprima del piano.
 
 ## Perché esiste
 
@@ -47,16 +51,32 @@ Setaccio li interpreta e li **correla per lotto**: tracciato ↔ PDF generati �
 di accompagnamento, così un lotto si guarda come un'unica cosa invece che come
 tre mucchi di file scollegati.
 
-## Sicurezza: di default non sposta nulla
+## Sicurezza: niente parte senza che tu abbia visto il piano
 
-L'ordine vive nell'indice, non nel filesystem. Setaccio in condizioni normali
-è **sola lettura**.
+L'ordine vive nell'indice, non nel filesystem: Setaccio in condizioni normali
+è **sola lettura**, e nessuna operazione parte da sola.
 
 - La modalità **Organizza** è **opt-in**, va attivata esplicitamente.
 - Ogni operazione passa da un'**anteprima obbligatoria**: si vede prima cosa
-  verrebbe spostato e dove.
-- Ogni operazione eseguita è **annullabile** (undo).
-- I **duplicati vanno in quarantena**, mai cancellati.
+  verrebbe toccato, quanto spazio si libera, e quali mosse verrebbero saltate
+  e perché.
+- Non si **sovrascrive mai**: una destinazione occupata è una mossa saltata con
+  un avviso, non un conflitto risolto d'ufficio.
+
+Dove finiscono i file lo decidi tu, e le tre strade non si disfano allo stesso
+modo — la differenza resta visibile fino all'ultimo clic:
+
+| | Cosa fa | Come si torna indietro |
+|---|---|---|
+| **Quarantena** | Sposta in una cartella dedicata dentro i dati dell'app, ricostruendo il percorso di origine | **Annulla** dall'elenco dei batch: i file tornano al loro posto |
+| **Cestino** | Consegna al cestino di sistema | Dal gestore file, **non** da Setaccio |
+| **Elimina** | Cancella dal disco | **Mai.** Per questo chiede anche di scrivere `ELIMINA` |
+
+Le due operazioni distruttive vivono in un modulo a parte (`src/cestino.rs`):
+è l'unico file del progetto in cui si perde qualcosa, ed è l'unico da rileggere
+quando ci si chiede cosa possa distruggere dei dati. Il **canonico di un gruppo
+di duplicati non si tocca mai**, e ciò che sta *dentro* un archivio non si
+cancella dal disco: va tolto dall'archivio, che è un'altra operazione.
 
 ## Installazione
 
@@ -66,7 +86,7 @@ Scarica il `.pkg.tar.zst` dalla pagina
 [Releases](https://github.com/russus87/setaccio/releases) e installalo:
 
 ```bash
-sudo pacman -U setaccio-0.1.0-1-x86_64.pkg.tar.zst
+sudo pacman -U setaccio-0.4.0-1-x86_64.pkg.tar.zst
 ```
 
 ### Windows

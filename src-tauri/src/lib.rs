@@ -2,13 +2,19 @@
 //!
 //! Il principio che tiene insieme il tutto: **il default non tocca mai il
 //! disco**. La scansione legge, l'indice vive a parte, e ogni operazione che
-//! sposta un file passa da un piano mostrato all'utente e resta annullabile.
+//! tocca un file passa da un piano mostrato all'utente prima di partire.
+//!
+//! Le operazioni che spostano sono annullabili ([`organize`]); quelle che
+//! tolgono davvero — cestino di sistema e cancellazione — non lo sono, stanno
+//! tutte in [`cestino`] e vanno chieste esplicitamente ogni volta.
 
 pub mod cerca;
+pub mod cestino;
 pub mod classify;
 pub mod db;
 pub mod dedupe;
 pub mod extract;
+pub mod ingombro;
 pub mod organize;
 pub mod scan;
 pub mod tracciati;
@@ -134,6 +140,18 @@ fn faccette(stato: tauri::State<'_, Stato0>) -> Esito<Vec<ConteggioEtichetta>> {
 }
 
 // ---------------------------------------------------------------------------
+// Ingombro — dove sono finiti i gigabyte
+// ---------------------------------------------------------------------------
+
+/// File più grandi, cartelle più pesanti e ripartizione per estensione, tutto
+/// sugli stessi filtri. `limite` vale solo per l'elenco dei file: i totali si
+/// calcolano su tutto ciò che passa i filtri.
+#[tauri::command]
+fn ingombro(stato: tauri::State<'_, Stato0>, filtri: Filtri, limite: i64) -> Esito<Ingombro> {
+    ingombro::ingombro(&stato.db, &filtri, limite).map_err(err)
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard e revisione
 // ---------------------------------------------------------------------------
 
@@ -216,6 +234,20 @@ fn duplicati_piano(stato: tauri::State<'_, Stato0>, file_ids: Vec<i64>) -> Esito
 #[tauri::command]
 fn operazioni_esegui(stato: tauri::State<'_, Stato0>, piano: PianoOperazioni) -> Esito<EsitoOperazioni> {
     organize::esegui(&stato.db, &piano).map_err(err)
+}
+
+/// Piano per consegnare i file al cestino di sistema. Restano recuperabili dal
+/// gestore file, ma **non** dall'undo di Setaccio: il piano è l'ultimo punto
+/// in cui ci si può fermare.
+#[tauri::command]
+fn cestino_piano(stato: tauri::State<'_, Stato0>, file_ids: Vec<i64>) -> Esito<PianoOperazioni> {
+    cestino::piano_cestino(&stato.db, &file_ids).map_err(err)
+}
+
+/// Piano per cancellare i file senza passare dal cestino. Irreversibile.
+#[tauri::command]
+fn elimina_piano(stato: tauri::State<'_, Stato0>, file_ids: Vec<i64>) -> Esito<PianoOperazioni> {
+    cestino::piano_elimina(&stato.db, &file_ids).map_err(err)
 }
 
 #[tauri::command]
@@ -326,6 +358,7 @@ pub fn run() {
             file_dettaglio,
             anteprima,
             faccette,
+            ingombro,
             statistiche,
             novita,
             coda_revisione,
@@ -336,6 +369,8 @@ pub fn run() {
             regola_attiva,
             duplicati,
             duplicati_piano,
+            cestino_piano,
+            elimina_piano,
             operazioni_esegui,
             operazioni_batch,
             operazioni_annulla,

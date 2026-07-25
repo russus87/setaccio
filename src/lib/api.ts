@@ -114,9 +114,23 @@ export interface Filtri {
   size_max: number | null;
   /** Include i file classificati `artefatto`, esclusi di default. */
   includi_artefatti: boolean;
+  /** `null` lascia decidere alla vista: rilevanza nel full-text, data sul nome. */
+  ordine: Ordine | null;
   limite: number | null;
   offset: number | null;
 }
+
+/** Come ordinare i risultati. Il backend accetta solo questi valori. */
+export type Ordine = "rilevanza" | "dimensione" | "recenti" | "vecchi" | "nome";
+
+/** Etichette degli ordinamenti, nell'ordine in cui vanno mostrati. */
+export const ORDINI: readonly { id: Ordine; etichetta: string }[] = [
+  { id: "rilevanza", etichetta: "Rilevanza" },
+  { id: "dimensione", etichetta: "Più grandi" },
+  { id: "recenti", etichetta: "Più recenti" },
+  { id: "vecchi", etichetta: "Più vecchi" },
+  { id: "nome", etichetta: "Nome" },
+];
 
 /** Filtri vuoti, da usare come base a cui applicare le modifiche. */
 export function filtriVuoti(): Filtri {
@@ -131,6 +145,7 @@ export function filtriVuoti(): Filtri {
     size_min: null,
     size_max: null,
     includi_artefatti: false,
+    ordine: null,
     limite: null,
     offset: null,
   };
@@ -205,7 +220,10 @@ export interface Mossa {
   file_id: number;
   origine: string;
   destinazione: string;
-  /** `quarantena` | `sposta` */
+  /**
+   * `quarantena` | `sposta` | `rimuovi_cartella` | `cestino` | `elimina`.
+   * Gli ultimi due non hanno destinazione e non si annullano da Setaccio.
+   */
   genere: string;
   motivo: string;
   eseguibile: boolean;
@@ -234,6 +252,11 @@ export interface Batch {
   /** Epoch secondi. */
   eseguito_il: number;
   annullato: boolean;
+  /**
+   * Falso per cestino ed eliminazione: da Setaccio non si torna indietro.
+   * La UI deve dirlo, non offrire un pulsante Annulla che fallirebbe.
+   */
+  annullabile: boolean;
 }
 
 /** Avanzamento della scansione. */
@@ -269,6 +292,34 @@ export interface Statistiche {
   per_contesto: ConteggioEtichetta[];
   /** Epoch secondi. */
   ultima_scansione: number | null;
+}
+
+/** Una cartella con quanto pesa l'albero che ha sotto. */
+export interface CartellaPesante {
+  path: string;
+  /** Ultimo segmento del percorso. */
+  nome: string;
+  /** Byte di tutto ciò che sta sotto, sottocartelle comprese. */
+  byte: number;
+  quanti: number;
+  /** Byte dei soli file direttamente dentro: dice se il peso è qui o sotto. */
+  byte_diretti: number;
+  /** Quanti separatori ha il percorso, per il rientro nella lista. */
+  profondita: number;
+}
+
+/** Dati della vista Ingombro: dove sono finiti i gigabyte. */
+export interface Ingombro {
+  /** I file più grandi che passano i filtri, dal più pesante. */
+  file: FileRecord[];
+  cartelle: CartellaPesante[];
+  per_estensione: ConteggioEtichetta[];
+  per_tipo: ConteggioEtichetta[];
+  /** Totali su tutto ciò che passa i filtri, non solo su quanto è in `file`. */
+  byte_totali: number;
+  quanti_totali: number;
+  /** Byte dei soli file elencati in `file`. */
+  byte_mostrati: number;
 }
 
 /** Riga della coda di revisione (anche qui il record è flattenato). */
@@ -379,6 +430,21 @@ export const anteprima = (id: number, pagina: number | null = null) =>
 export const faccette = () => chiama<ConteggioEtichetta[]>("faccette");
 
 /* ==========================================================================
+   Ingombro
+   ========================================================================== */
+
+/**
+ * File più grandi, cartelle più pesanti e ripartizione per estensione, tutto
+ * sugli stessi filtri.
+ *
+ * `limite` vale solo per l'elenco dei file: totali, cartelle ed estensioni si
+ * calcolano su tutto ciò che passa i filtri, così la percentuale «i primi N
+ * pesano X» resta vera.
+ */
+export const ingombro = (filtri: Filtri = filtriVuoti(), limite = 100) =>
+  chiama<Ingombro>("ingombro", { filtri, limite });
+
+/* ==========================================================================
    Dashboard e revisione
    ========================================================================== */
 
@@ -439,6 +505,22 @@ export const duplicatiPiano = (fileIds: number[]) =>
 
 export const operazioniEsegui = (piano: PianoOperazioni) =>
   chiama<EsitoOperazioni>("operazioni_esegui", { piano });
+
+/**
+ * Piano per consegnare i file al **cestino di sistema**.
+ *
+ * Restano recuperabili dal gestore file, ma non dall'undo di Setaccio: il
+ * piano è l'ultimo punto in cui ci si può fermare, e la UI deve dirlo.
+ */
+export const cestinoPiano = (fileIds: number[]) =>
+  chiama<PianoOperazioni>("cestino_piano", { fileIds });
+
+/**
+ * Piano per cancellare i file **senza passare dal cestino**. Irreversibile:
+ * non chiamarlo senza una conferma esplicita e separata dell'utente.
+ */
+export const eliminaPiano = (fileIds: number[]) =>
+  chiama<PianoOperazioni>("elimina_piano", { fileIds });
 
 export const operazioniBatch = () => chiama<Batch[]>("operazioni_batch");
 
