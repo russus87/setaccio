@@ -35,10 +35,17 @@ tar = "0.4.46"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
-# Cestino di sistema. `default-features = false` toglie `chrono`, che il crate
-# usa solo per l'`os_limited` di Windows: qui basta consegnare il file al
-# cestino, il recupero lo fa il gestore file del sistema.
-trash = { version = "5", default-features = false }
+# Cestino di sistema. Si toglie `chrono`, che serve solo all'`os_limited` di
+# Windows: qui basta consegnare il file al cestino, il recupero lo fa il
+# gestore file del sistema.
+#
+# `coinit_apartmentthreaded` invece **va tenuta**: su Windows il crate esige
+# che una delle due feature di apartment COM sia scelta, e senza fallisce la
+# compilazione con un errore piantato lì apposta. Su Linux non cambia niente,
+# quindi togliendola per sbaglio ci si accorge del guasto solo in CI.
+trash = { version = "5", default-features = false, features = [
+  "coinit_apartmentthreaded",
+] }
 walkdir = "2.5.0"
 zip = "4.2.0"
 
