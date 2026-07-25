@@ -10,6 +10,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import {
     accorciaPath,
+    cartelleVuotePiano,
     faccette,
     FASCE,
     formattaByte,
@@ -67,6 +68,13 @@
   let inCorso = $state(false);
 
   const destinazione = $derived(destinazioneManuale ?? destinazionePredefinita ?? "");
+
+  // ---- Pulizia delle cartelle vuote --------------------------------------
+  /** `null` = tutte le sorgenti attive più la quarantena, il caso normale. */
+  let radicePulizia = $state<string | null>(null);
+  let pianoPulizia = $state<PianoOperazioni | null>(null);
+  let esitoPulizia = $state<EsitoOperazioni | null>(null);
+  let inCorsoPulizia = $state(false);
 
   $effect(() => {
     void ricarica;
@@ -228,6 +236,34 @@
       inCorso = false;
     }
   }
+
+  async function cercaCartelleVuote() {
+    inCorsoPulizia = true;
+    esitoPulizia = null;
+    try {
+      pianoPulizia = await cartelleVuotePiano(radicePulizia ? [radicePulizia] : []);
+      errore = null;
+    } catch (e) {
+      errore = messaggioErrore(e);
+    } finally {
+      inCorsoPulizia = false;
+    }
+  }
+
+  async function eseguiPulizia() {
+    if (!pianoPulizia) return;
+    inCorsoPulizia = true;
+    try {
+      esitoPulizia = await operazioniEsegui(pianoPulizia);
+      ricarica += 1;
+    } catch (e) {
+      errore = messaggioErrore(e);
+    } finally {
+      inCorsoPulizia = false;
+    }
+  }
+
+  const sorgentiAttive = $derived(sorgenti.filter((s) => s.attiva));
 
   const regoleBuiltin = $derived(regole.filter((r) => r.builtin));
   const regoleMie = $derived(regole.filter((r) => !r.builtin));
@@ -673,6 +709,134 @@
       {/if}
     </div>
   </Card>
+
+  <!-- Pulizia ----------------------------------------------------------- -->
+  <Card
+    titolo="Pulizia"
+    sottotitolo="Toglie le cartelle rimaste vuote dopo aver spostato o messo in quarantena"
+  >
+    <div class="impila">
+      <div class="repo-guard">
+        <span class="repo-icona"><Icona nome="avviso" dimensione={18} /></span>
+        <div>
+          <p class="nota-titolo">L'unica cosa che Setaccio cancella davvero</p>
+          <p class="nota-testo">
+            Qui non si spostano file: si tolgono <strong>contenitori vuoti</strong>,
+            e solo quelli. La rimozione usa <span class="mono">remove_dir</span>,
+            mai <span class="mono">remove_dir_all</span>: se dentro è rimasto
+            qualcosa è il sistema operativo a rifiutare, quindi la garanzia non
+            dipende da un controllo nostro che potrebbe sbagliare.
+          </p>
+          <ul class="elenco-nota">
+            <li>
+              <span class="pallino-nota" aria-hidden="true"></span>
+              <span>
+                <strong>Scende a cascata</strong>: una cartella che conteneva
+                solo cartelle vuote resta vuota a sua volta e viene tolta anche
+                lei, nella stessa passata.
+              </span>
+            </li>
+            <li>
+              <span class="pallino-nota" aria-hidden="true"></span>
+              <span>
+                <strong>Le radici delle sorgenti non si toccano mai</strong>:
+                svuotare <span class="mono">~/Scaricati</span> non fa sparire
+                <span class="mono">~/Scaricati</span>.
+              </span>
+            </li>
+            <li>
+              <span class="pallino-nota" aria-hidden="true"></span>
+              <span>
+                <strong>È annullabile</strong> come tutto il resto: l'annulla
+                del batch ricrea le cartelle, dall'elenco nella sezione
+                Duplicati.
+              </span>
+            </li>
+            <li>
+              <span class="pallino-nota" aria-hidden="true"></span>
+              <span>
+                Prima vedi l'elenco completo, poi confermi: niente sparisce
+                senza che tu l'abbia letto.
+              </span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="scelta-contesti">
+        <p class="nota-titolo">
+          Dove guardare
+          <span class="testo-tenue">— di norma ovunque Setaccio abbia messo mano</span>
+        </p>
+        <div class="chip-riga">
+          <button
+            class="chip"
+            class:acceso={radicePulizia === null}
+            aria-pressed={radicePulizia === null}
+            onclick={() => {
+              radicePulizia = null;
+              pianoPulizia = null;
+              esitoPulizia = null;
+            }}
+          >
+            Tutte le sorgenti attive + quarantena
+          </button>
+          {#each sorgentiAttive as s (s.id)}
+            <button
+              class="chip"
+              class:acceso={radicePulizia === s.path}
+              aria-pressed={radicePulizia === s.path}
+              title={s.path}
+              onclick={() => {
+                radicePulizia = s.path;
+                pianoPulizia = null;
+                esitoPulizia = null;
+              }}
+            >
+              <span class="mono troncato">{accorciaPath(s.path, 34)}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="riga-azione">
+        <Bottone
+          variante="secondario"
+          icona="cestino"
+          caricamento={inCorsoPulizia && !pianoPulizia}
+          onclick={cercaCartelleVuote}
+        >
+          Cerca le cartelle vuote
+        </Bottone>
+      </div>
+
+      {#if pianoPulizia && pianoPulizia.mosse.length === 0}
+        <Vuoto
+          compatto
+          icona="check"
+          titolo="Non c'è niente da pulire"
+          messaggio="Sotto le cartelle guardate non è rimasto nessun contenitore vuoto: l'albero è già in ordine."
+          testoAzione="Controlla di nuovo"
+          iconaAzione="aggiorna"
+          onazione={cercaCartelleVuote}
+        />
+      {:else if pianoPulizia}
+        <RiepilogoPiano
+          piano={pianoPulizia}
+          esito={esitoPulizia}
+          inCorso={inCorsoPulizia}
+          mostraSpazio={false}
+          testoConferma="Rimuovi le cartelle vuote"
+          spiegazione="Vengono tolte solo le cartelle vuote qui elencate, e nessun file: se una di queste nel frattempo si riempie, il sistema operativo rifiuta la rimozione e la mossa risulta fallita. Il batch resta annullabile e l'annulla ricrea le cartelle."
+          onconferma={eseguiPulizia}
+          onchiudi={() => {
+            pianoPulizia = null;
+            esitoPulizia = null;
+          }}
+        />
+      {/if}
+    </div>
+  </Card>
 </div>
 
 <style>
@@ -846,6 +1010,31 @@
 
   .repo-icona.neutro {
     color: var(--info);
+  }
+
+  .elenco-nota {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    margin-top: var(--sp-2);
+  }
+
+  .elenco-nota li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    font-size: var(--minuto);
+    color: var(--testo-2);
+    line-height: var(--riga-larga);
+  }
+
+  .pallino-nota {
+    width: 4px;
+    height: 4px;
+    margin-top: 9px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--testo-3);
   }
 
   .suggerite {

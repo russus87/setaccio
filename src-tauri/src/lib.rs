@@ -233,6 +233,15 @@ fn organizza_piano(stato: tauri::State<'_, Stato0>, destinazione: String, contes
     organize::piano_organizza(&stato.db, &destinazione, &contesti).map_err(err)
 }
 
+/// Cartelle rimaste vuote sotto le radici indicate (vuoto = tutte le sorgenti
+/// più la quarantena). È l'unica operazione che cancella qualcosa, e cancella
+/// solo contenitori vuoti: `remove_dir` fallisce se dentro c'è ancora un file.
+/// Come ogni altra operazione passa dal piano ed è annullabile.
+#[tauri::command]
+fn cartelle_vuote_piano(stato: tauri::State<'_, Stato0>, radici: Vec<String>) -> Esito<PianoOperazioni> {
+    organize::piano_cartelle_vuote(&stato.db, &radici).map_err(err)
+}
+
 /// Cartella da proporre come destinazione: la sorgente che contiene già la
 /// maggior parte dei file di quei contesti. Evita all'utente di cercare a mano
 /// una cartella che quasi sempre è la sorgente stessa.
@@ -332,6 +341,7 @@ pub fn run() {
             operazioni_annulla,
             organizza_piano,
             organizza_destinazione,
+            cartelle_vuote_piano,
             lotti,
             lotto_dettaglio,
             layout_detect,

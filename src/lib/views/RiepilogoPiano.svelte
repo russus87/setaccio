@@ -28,6 +28,12 @@
     /** Frase che spiega cosa succede ai file. */
     spiegazione?: string;
     testoConferma?: string;
+    /**
+     * Il riquadro dello spazio liberato. Va spento per i piani che non
+     * recuperano byte — la pulizia delle cartelle vuote — dove uno zero in
+     * grande sembrerebbe un'operazione inutile invece che una di riordino.
+     */
+    mostraSpazio?: boolean;
     onconferma: () => void;
     onchiudi: () => void;
   }
@@ -38,6 +44,7 @@
     inCorso = false,
     spiegazione = "I file non vengono cancellati: vengono spostati in quarantena, e ogni batch resta annullabile.",
     testoConferma = "Conferma ed esegui",
+    mostraSpazio = true,
     onconferma,
     onchiudi,
   }: Props = $props();
@@ -104,10 +111,12 @@
           </span>
           <span class="etichetta">saltate</span>
         </div>
-        <div class="numero">
-          <span class="cifra cifre">{formattaByte(piano.spazio_liberato)}</span>
-          <span class="etichetta">spazio liberato</span>
-        </div>
+        {#if mostraSpazio}
+          <div class="numero">
+            <span class="cifra cifre">{formattaByte(piano.spazio_liberato)}</span>
+            <span class="etichetta">spazio liberato</span>
+          </div>
+        {/if}
       </div>
 
       <div class="nota">
@@ -134,16 +143,24 @@
         <div class="blocco">
           <p class="titolo-blocco">Le prime mosse che verranno eseguite</p>
           <ul class="mosse">
-            {#each eseguibili.slice(0, 8) as m (m.file_id)}
+            <!-- La chiave è l'origine e non il `file_id`: le mosse che tolgono
+                 una cartella non hanno un file dietro e arrivano tutte con
+                 zero, mentre il percorso di partenza è unico in ogni piano. -->
+            {#each eseguibili.slice(0, 8) as m (m.origine)}
               <li class="mossa">
-                <span class="genere">{m.genere}</span>
+                <span class="genere">{m.genere.replace(/_/g, " ")}</span>
                 <span class="mono troncato" title={m.origine}>
                   {accorciaPath(m.origine, 58)}
                 </span>
-                <Icona nome="freccia" dimensione={13} />
-                <span class="mono troncato" title={m.destinazione}>
-                  {accorciaPath(m.destinazione, 58)}
-                </span>
+                <!-- Una destinazione vuota non è un percorso da mostrare a
+                     metà: senza bersaglio spariscono anche la freccia e la
+                     seconda colonna. -->
+                {#if m.destinazione}
+                  <Icona nome="freccia" dimensione={13} />
+                  <span class="mono troncato" title={m.destinazione}>
+                    {accorciaPath(m.destinazione, 58)}
+                  </span>
+                {/if}
               </li>
             {/each}
           </ul>

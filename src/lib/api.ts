@@ -449,6 +449,19 @@ export const organizzaPiano = (destinazione: string, contesti: string[]) =>
   chiama<PianoOperazioni>("organizza_piano", { destinazione, contesti });
 
 /**
+ * Le cartelle rimaste vuote sotto le radici indicate, come piano da
+ * confermare. `radici` vuoto significa «tutte le sorgenti attive più la
+ * cartella di quarantena».
+ *
+ * Le mosse hanno `genere: "rimuovi_cartella"`, `origine` con il percorso della
+ * cartella e `destinazione` vuota: non si sposta niente, si toglie il
+ * contenitore. `spazio_liberato` resta 0, perché una cartella vuota non occupa
+ * spazio: qui il guadagno è l'ordine.
+ */
+export const cartelleVuotePiano = (radici: string[] = []) =>
+  chiama<PianoOperazioni>("cartelle_vuote_piano", { radici });
+
+/**
  * Cartella da proporre come destinazione: la sorgente che contiene già la
  * maggior parte dei file di quei contesti. `null` quando non c'è nulla da cui
  * dedurla (indice vuoto). Con la lista dei contesti vuota guarda tutto l'indice.

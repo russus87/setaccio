@@ -352,6 +352,141 @@ pub fn destinazione_suggerita(db: &Db, contesti: &[String]) -> Result<Option<Str
     Ok(v)
 }
 
+// ---------------------------------------------------------------------------
+// Cartelle vuote
+// ---------------------------------------------------------------------------
+
+/// Genere di mossa che rimuove una cartella rimasta vuota.
+pub const GENERE_CARTELLA: &str = "rimuovi_cartella";
+
+/// Trova le cartelle rimaste vuote sotto le radici indicate.
+///
+/// È l'unica eccezione al divieto di cancellare, e regge perché è una
+/// cancellazione che non può distruggere dati: si usa `remove_dir`, **mai**
+/// `remove_dir_all`, quindi è il sistema operativo stesso a rifiutare se
+/// dentro c'è ancora qualcosa. E resta annullabile, perché ricreare una
+/// cartella vuota è un'operazione esatta: nel journal finisce come le altre.
+///
+/// Le radici vuote significano «tutte le sorgenti più la quarantena». La
+/// radice stessa non viene mai rimossa: svuotare `~/Scaricati` non deve far
+/// sparire `~/Scaricati`.
+pub fn piano_cartelle_vuote(db: &Db, radici: &[String]) -> Result<PianoOperazioni> {
+    let mut basi: Vec<PathBuf> = if radici.is_empty() {
+        db.sorgenti()?
+            .into_iter()
+            .filter(|s| s.attiva)
+            .map(|s| PathBuf::from(s.path))
+            .collect()
+    } else {
+        radici.iter().map(PathBuf::from).collect()
+    };
+    if radici.is_empty() {
+        if let Ok(q) = cartella_quarantena() {
+            basi.push(q);
+        }
+    }
+
+    let mut candidate: Vec<(usize, PathBuf)> = Vec::new();
+    for base in &basi {
+        if !base.is_dir() {
+            continue;
+        }
+        for voce in walkdir::WalkDir::new(base)
+            .min_depth(1)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|v| v.ok())
+        {
+            // Mai seguire un link: rimuoverebbe il collegamento, non la
+            // cartella, e il conteggio del vuoto sarebbe quello del bersaglio.
+            if voce.file_type().is_dir() && !voce.path_is_symlink() {
+                candidate.push((voce.depth(), voce.path().to_path_buf()));
+            }
+        }
+    }
+
+    // Dalla più profonda: così una cartella che conteneva solo cartelle vuote
+    // risulta a sua volta vuota quando arriva il suo turno, e la pulizia
+    // scende a cascata in una passata sola.
+    candidate.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+
+    let mut rimosse: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    let mut mosse = Vec::new();
+
+    for (_, dir) in candidate {
+        match vuota_dopo(&dir, &rimosse) {
+            Ok(true) => {
+                rimosse.insert(dir.clone());
+                mosse.push(Mossa {
+                    file_id: 0,
+                    origine: dir.to_string_lossy().into_owned(),
+                    destinazione: String::new(),
+                    genere: GENERE_CARTELLA.into(),
+                    motivo: "cartella vuota".into(),
+                    eseguibile: true,
+                    avviso: None,
+                });
+            }
+            Ok(false) => {}
+            Err(e) => mosse.push(Mossa {
+                file_id: 0,
+                origine: dir.to_string_lossy().into_owned(),
+                destinazione: String::new(),
+                genere: GENERE_CARTELLA.into(),
+                motivo: "cartella vuota".into(),
+                eseguibile: false,
+                avviso: Some(format!("impossibile leggerne il contenuto: {e}")),
+            }),
+        }
+    }
+
+    Ok(assembla(nuovo_batch(db)?, mosse, &[]))
+}
+
+fn marca_annullata(db: &Db, id: i64) -> Result<()> {
+    let conn = db.conn();
+    conn.execute(
+        "UPDATE operazione SET annullata = 1 WHERE id = ?1",
+        params![id],
+    )?;
+    Ok(())
+}
+
+/// Rimuove una cartella vuota e la registra nel journal.
+///
+/// `remove_dir` e non `remove_dir_all`: se nel frattempo qualcuno ci ha messo
+/// dentro qualcosa, è il sistema operativo a rifiutare. La garanzia «non si
+/// perdono dati» non dipende quindi da un controllo nostro, che sarebbe
+/// comunque soggetto a una corsa fra il controllo e la rimozione.
+fn rimuovi_cartella(db: &Db, batch: &str, m: &Mossa) -> Result<()> {
+    let dir = Path::new(&m.origine);
+    if !dir.exists() {
+        bail!("non esiste più");
+    }
+    std::fs::remove_dir(dir).with_context(|| format!("rimozione di «{}»", m.origine))?;
+    let conn = db.conn();
+    conn.execute(
+        "INSERT INTO operazione (batch, genere, origine, destinazione, file_id)
+         VALUES (?1, ?2, ?3, '', NULL)",
+        params![batch, GENERE_CARTELLA, m.origine],
+    )?;
+    Ok(())
+}
+
+/// True se la cartella è vuota, o se contiene soltanto cartelle già destinate
+/// alla rimozione in questo stesso piano.
+fn vuota_dopo(dir: &Path, rimosse: &std::collections::HashSet<PathBuf>) -> std::io::Result<bool> {
+    for voce in std::fs::read_dir(dir)? {
+        let voce = voce?;
+        let p = voce.path();
+        let e_dir = voce.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        if !e_dir || !rimosse.contains(&p) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// Prepara il piano della modalità Organizza: i file dei contesti indicati
 /// vengono spostati sotto `destinazione/<contesto>/`.
 ///
@@ -528,7 +663,12 @@ pub fn esegui(db: &Db, piano: &PianoOperazioni) -> Result<EsitoOperazioni> {
     let mut errori = Vec::new();
 
     for m in piano.mosse.iter().filter(|m| m.eseguibile) {
-        match sposta(db, &batch, m) {
+        let esito = if m.genere == GENERE_CARTELLA {
+            rimuovi_cartella(db, &batch, m)
+        } else {
+            sposta(db, &batch, m)
+        };
+        match esito {
             Ok(()) => eseguite += 1,
             Err(e) => {
                 // Un errore su una mossa non ferma le altre: l'utente ha
@@ -584,17 +724,17 @@ pub fn batch_recenti(db: &Db) -> Result<Vec<Batch>> {
 
 /// Riporta indietro tutte le mosse di un batch.
 pub fn annulla(db: &Db, batch: &str) -> Result<EsitoOperazioni> {
-    let da_annullare: Vec<(i64, String, String, Option<i64>)> = {
+    let da_annullare: Vec<(i64, String, String, Option<i64>, String)> = {
         let conn = db.conn();
         let mut st = conn.prepare(
-            "SELECT id, origine, destinazione, file_id
+            "SELECT id, origine, destinazione, file_id, genere
                FROM operazione
               WHERE batch = ?1 AND annullata = 0
               ORDER BY id DESC",
         )?;
         let v = st
             .query_map(params![batch], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         v
@@ -607,9 +747,32 @@ pub fn annulla(db: &Db, batch: &str) -> Result<EsitoOperazioni> {
     // Ordine INVERSO: se il batch ha creato cartelle annidate o ha spostato
     // più file nello stesso posto, disfare a ritroso è l'unico ordine che
     // ripercorre esattamente ciò che è successo.
-    for (id, origine, destinazione, file_id) in da_annullare {
+    for (id, origine, destinazione, file_id, genere) in da_annullare {
         let orig = Path::new(&origine);
         let dest = Path::new(&destinazione);
+
+        // Disfare la rimozione di una cartella vuota vuole dire ricrearla: è
+        // un'operazione esatta, perché di quella cartella non c'era altro da
+        // conservare che la sua esistenza.
+        if genere == GENERE_CARTELLA {
+            if orig.exists() {
+                marca_annullata(db, id)?;
+                eseguite += 1;
+                continue;
+            }
+            match std::fs::create_dir_all(orig) {
+                Ok(()) => {
+                    marca_annullata(db, id)?;
+                    eseguite += 1;
+                }
+                Err(e) => {
+                    fallite += 1;
+                    errori.push(format!("{origine}: impossibile ricrearla ({e})"));
+                }
+            }
+            continue;
+        }
+
         if orig.exists() {
             // Nel frattempo qualcosa ha rioccupato l'origine: si salta e lo si
             // dice, non si sovrascrive (regola 2, vale anche all'indietro).
@@ -932,6 +1095,58 @@ mod test {
             .unwrap();
         let b2 = nuovo_batch(&db).unwrap();
         assert_ne!(b1, b2);
+    }
+
+    #[test]
+    fn la_pulizia_toglie_le_vuote_a_cascata_e_risparmia_le_piene() {
+        let db = Db::in_memoria().unwrap();
+        let base = std::env::temp_dir().join(format!("setaccio-vuote-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&base);
+
+        // vuota/  → va via
+        // annidata/dentro/ → vanno via entrambe, a cascata
+        // piena/ con un file → resta
+        // piena2/sotto/ con un file dentro sotto → restano entrambe
+        std::fs::create_dir_all(base.join("vuota")).unwrap();
+        std::fs::create_dir_all(base.join("annidata/dentro")).unwrap();
+        std::fs::create_dir_all(base.join("piena")).unwrap();
+        std::fs::write(base.join("piena/f.txt"), b"x").unwrap();
+        std::fs::create_dir_all(base.join("piena2/sotto")).unwrap();
+        std::fs::write(base.join("piena2/sotto/f.txt"), b"x").unwrap();
+
+        let radici = vec![base.to_string_lossy().into_owned()];
+        let piano = piano_cartelle_vuote(&db, &radici).unwrap();
+        let previste: std::collections::HashSet<String> = piano
+            .mosse
+            .iter()
+            .filter(|m| m.eseguibile)
+            .map(|m| m.origine.clone())
+            .collect();
+
+        assert!(previste.contains(&base.join("vuota").to_string_lossy().into_owned()));
+        assert!(previste.contains(&base.join("annidata").to_string_lossy().into_owned()));
+        assert!(previste.contains(&base.join("annidata/dentro").to_string_lossy().into_owned()));
+        assert!(
+            !previste.contains(&base.join("piena").to_string_lossy().into_owned()),
+            "una cartella con dentro un file non deve mai finire nel piano"
+        );
+        assert!(!previste.contains(&base.join("piena2").to_string_lossy().into_owned()));
+        assert!(!previste.contains(&base.join("piena2/sotto").to_string_lossy().into_owned()));
+        // La radice non si tocca: svuotare Scaricati non deve far sparire Scaricati.
+        assert!(!previste.contains(&base.to_string_lossy().into_owned()));
+
+        let esito = esegui(&db, &piano).unwrap();
+        assert_eq!(esito.fallite, 0, "errori: {:?}", esito.errori);
+        assert!(!base.join("vuota").exists());
+        assert!(!base.join("annidata").exists());
+        assert!(base.join("piena/f.txt").exists(), "il file non va perso");
+        assert!(base.join("piena2/sotto/f.txt").exists());
+
+        // E si può disfare: le cartelle tornano.
+        let ann = annulla(&db, &esito.batch).unwrap();
+        assert_eq!(ann.fallite, 0, "errori: {:?}", ann.errori);
+        assert!(base.join("vuota").is_dir());
+        assert!(base.join("annidata/dentro").is_dir());
     }
 
     #[test]
