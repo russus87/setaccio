@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="lime" x1="0" y1="0" x2="0.85" y2="1">
+      <stop offset="0%" stop-color="#C6FF4A"/>
+      <stop offset="55%" stop-color="#8FE81C"/>
+      <stop offset="100%" stop-color="#5BB800"/>
+    </linearGradient>
+    <clipPath id="rete">
+      <circle cx="256" cy="206" r="126"/>
+    </clipPath>
+  </defs>
+
+  <rect width="512" height="512" rx="116" fill="#0E100C"/>
+
+  <!-- Il setaccio: cerchio spesso + reticolo interno -->
+  <g clip-path="url(#rete)" stroke="url(#lime)" stroke-width="15" stroke-linecap="round" opacity="0.92">
+    <path d="M130 128 H382 M130 178 H382 M130 228 H382 M130 278 H382"/>
+    <path d="M156 80 V332 M206 80 V332 M256 80 V332 M306 80 V332 M356 80 V332"/>
+  </g>
+  <circle cx="256" cy="206" r="126" fill="none" stroke="url(#lime)" stroke-width="30"/>
+
+  <!-- Ciò che passa attraverso: il grano separato dalla pula -->
+  <circle cx="196" cy="396" r="20" fill="url(#lime)"/>
+  <circle cx="262" cy="434" r="27" fill="url(#lime)"/>
+  <circle cx="330" cy="392" r="16" fill="url(#lime)"/>
+</svg>

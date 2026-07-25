@@ -1,0 +1,153 @@
+name: build
+
+"on":
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Arch Linux — produces setaccio-<ver>-1-x86_64.pkg.tar.zst
+  # ---------------------------------------------------------------------------
+  arch:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install toolchain & deps
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel gcc git rust nodejs npm \
+            webkit2gtk-4.1 gtk3 \
+            librsvg patchelf openssl sudo curl tar
+          # base-devel/gcc are required: rusqlite is built with the `bundled`
+          # feature, so SQLite's C sources are compiled from scratch here.
+
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend + binary
+        run: |
+          npm ci
+          npx tauri build --no-bundle
+
+      - name: Stage package artifacts
+        run: |
+          mkdir -p pkgstage
+          cp src-tauri/target/release/setaccio pkgstage/setaccio
+          cp packaging/setaccio.desktop pkgstage/setaccio.desktop
+          cp packaging/PKGBUILD pkgstage/PKGBUILD
+          rsvg-convert -w 128 -h 128 assets/icon.svg -o pkgstage/icon-128.png
+          rsvg-convert -w 256 -h 256 assets/icon.svg -o pkgstage/icon-256.png
+          rsvg-convert -w 512 -h 512 assets/icon.svg -o pkgstage/icon-512.png
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.ver.outputs.version }}/" pkgstage/PKGBUILD
+
+      - name: makepkg (.pkg.tar.zst)
+        run: |
+          useradd -m builder
+          chown -R builder pkgstage
+          cd pkgstage
+          sudo -u builder makepkg -f --noconfirm
+          ls -1 *.pkg.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: pkgstage/*.pkg.tar.zst
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: pkgstage/*.pkg.tar.zst
+
+  # ---------------------------------------------------------------------------
+  # Linux — produces .AppImage (+ .deb)
+  # ---------------------------------------------------------------------------
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            patchelf libfuse2 file
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build bundles
+        run: |
+          npm ci
+          npx tauri build --bundles appimage deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundles
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+
+  # ---------------------------------------------------------------------------
+  # Windows — produces .msi (WiX) and -setup.exe (NSIS)
+  # ---------------------------------------------------------------------------
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build bundles
+        shell: bash
+        run: |
+          npm ci
+          npx tauri build --bundles msi nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*-setup.exe

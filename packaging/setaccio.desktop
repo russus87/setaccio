@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Setaccio
+Comment=Indicizza, categorizza e cerca i tuoi file locali
+Exec=setaccio
+Icon=setaccio
+Terminal=false
+Categories=Utility;FileTools;
+StartupNotify=true
+Keywords=file;ricerca;indice;documenti;duplicati;pdf;tracciati;search;index;

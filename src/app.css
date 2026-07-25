@@ -1,0 +1,568 @@
+/* ==========================================================================
+   Setaccio — reset, token del tema, utility.
+
+   I token sono variabili CSS su :root. Il tema chiaro è il default; quello
+   scuro arriva da due strade:
+     1. @media (prefers-color-scheme: dark) — vale finché l'utente non sceglie;
+     2. [data-tema="scuro"] sull'elemento <html> — l'interruttore manuale.
+   Il selettore :root:not([data-tema="chiaro"]) dentro la media query fa sì che
+   la scelta manuale «chiaro» vinca anche su un sistema impostato scuro, e
+   [data-tema="scuro"] vince su un sistema chiaro: l'interruttore vince sempre,
+   in entrambe le direzioni.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Reset minimale
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--famiglia);
+  font-size: var(--corpo);
+  line-height: var(--riga-normale);
+  color: var(--testo);
+  background: var(--sfondo);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow: hidden; /* l'app gestisce da sé lo scorrimento delle sue aree */
+}
+
+#app {
+  height: 100%;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: var(--riga-stretta);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accento);
+  outline-offset: 2px;
+  border-radius: var(--raggio-sm);
+}
+
+::selection {
+  background: var(--accento-tenue);
+  color: var(--testo);
+}
+
+/* Barre di scorrimento discrete, coerenti col tema. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bordo-forte) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--bordo-forte);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--testo-3);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. Token indipendenti dal tema
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* Tipografia -------------------------------------------------------- */
+  --famiglia: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    "Noto Sans", Arial, sans-serif;
+  --famiglia-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code",
+    "DejaVu Sans Mono", Consolas, monospace;
+
+  --micro: 0.6875rem; /* 11px — etichette di grafico, meta minuscoli   */
+  --minuto: 0.75rem; /*  12px — sottotitoli di lista, badge            */
+  --piccolo: 0.8125rem; /* 13px — testo denso, celle di tabella        */
+  --corpo: 0.875rem; /*   14px — testo corrente dell'interfaccia       */
+  --medio: 1rem; /*        16px — titoli di card                       */
+  --grande: 1.25rem; /*    20px — titoli di sezione                    */
+  --titolo: 1.75rem; /*    28px — titolo di pagina                     */
+  --cifra: 2rem; /*        32px — numeri delle stat tile               */
+  --cifra-grande: 2.75rem; /* 44px — valore del gauge                  */
+
+  --riga-stretta: 1.15;
+  --riga-normale: 1.5;
+  --riga-larga: 1.7;
+
+  --peso-normale: 400;
+  --peso-medio: 500;
+  --peso-forte: 600;
+  --peso-grasso: 700;
+
+  /* Spaziature (scala di 4) -------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 56px;
+
+  /* Raggi — le card sono molto arrotondate, come nei mockup ------------ */
+  --raggio-sm: 8px;
+  --raggio: 12px;
+  --raggio-lg: 16px;
+  --raggio-xl: 20px;
+  --raggio-xxl: 28px;
+  --raggio-pillola: 999px;
+
+  /* Misure di struttura ------------------------------------------------ */
+  --larghezza-sidebar: 232px;
+  --altezza-controllo: 38px;
+  --altezza-controllo-lg: 46px;
+  --larghezza-contenuto: 1440px;
+
+  /* Movimento ---------------------------------------------------------- */
+  --transizione: 140ms cubic-bezier(0.32, 0.72, 0, 1);
+  --transizione-lenta: 260ms cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Accento lime — identico nelle due varianti (dal logo dell'app) ------ */
+  --accento: #8fe81c;
+  --accento-scuro: #5bb800;
+  --accento-chiaro: #c6ff4a;
+  /* Il lime è chiarissimo: sopra l'accento il testo va SEMPRE scuro. */
+  --su-accento: #101b04;
+  --gradiente-accento: linear-gradient(
+    135deg,
+    var(--accento-scuro) 0%,
+    var(--accento) 52%,
+    var(--accento-chiaro) 100%
+  );
+  --gradiente-accento-tenue: linear-gradient(
+    135deg,
+    rgba(91, 184, 0, 0.16) 0%,
+    rgba(198, 255, 74, 0.16) 100%
+  );
+
+  /* Livelli di elevazione dei grafici: neutro forte, neutro tenue, lime.
+     È l'ordine che si vede nel mockup del grafico a barre.               */
+  --serie-3: var(--accento);
+}
+
+/* --------------------------------------------------------------------------
+   3. Tema chiaro (default)
+   -------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  --sfondo: #ffffff;
+  --sfondo-2: #f7f7f5;
+  --superficie: #f4f4f1;
+  --superficie-2: #ebebe7;
+  --superficie-3: #e2e2dd;
+  --superficie-inversa: #16171a;
+  --testo-su-inversa: #f6f6f4;
+
+  --bordo: #e5e5e0;
+  --bordo-forte: #d3d3cc;
+
+  --testo: #101112;
+  --testo-2: #5b5f5a;
+  --testo-3: #6f7369;
+
+  --accento-tenue: rgba(143, 232, 28, 0.2);
+  --accento-bordo: rgba(91, 184, 0, 0.45);
+  --accento-testo: #3d7600; /* lime leggibile su fondo chiaro */
+
+  --ombra-1: 0 1px 2px rgba(16, 17, 18, 0.04);
+  --ombra-2: 0 2px 8px rgba(16, 17, 18, 0.06);
+  --ombra-3: 0 8px 28px rgba(16, 17, 18, 0.1);
+  --ombra-accento: 0 10px 30px rgba(91, 184, 0, 0.28);
+
+  /* Stati ---------------------------------------------------------- */
+  --canonico: #1f8a3c;
+  --canonico-bg: rgba(31, 138, 60, 0.12);
+  --duplicato: #97620f;
+  --duplicato-bg: rgba(151, 98, 15, 0.13);
+  --orfano: #b8442a;
+  --orfano-bg: rgba(184, 68, 42, 0.12);
+
+  /* Tipi ----------------------------------------------------------- */
+  --documento: #2f5fc4;
+  --documento-bg: rgba(47, 95, 196, 0.12);
+  --tracciato: #6b45c4;
+  --tracciato-bg: rgba(107, 69, 196, 0.12);
+  --archivio: #97620f;
+  --archivio-bg: rgba(151, 98, 15, 0.13);
+  --media: #b03a71;
+  --media-bg: rgba(176, 58, 113, 0.11);
+  --installer: #0f7a68;
+  --installer-bg: rgba(15, 122, 104, 0.12);
+  --artefatto: #5f6470;
+  --artefatto-bg: rgba(95, 100, 112, 0.11);
+  --altro: #6b7079;
+  --altro-bg: rgba(107, 112, 121, 0.1);
+
+  /* Semantici ------------------------------------------------------ */
+  --successo: #1f8a3c;
+  --successo-bg: rgba(31, 138, 60, 0.12);
+  --info: #2f5fc4;
+  --info-bg: rgba(47, 95, 196, 0.12);
+  --avviso: #97620f;
+  --avviso-bg: rgba(151, 98, 15, 0.13);
+  --pericolo: #c0392b;
+  --pericolo-bg: rgba(192, 57, 43, 0.11);
+
+  /* Grafici -------------------------------------------------------- */
+  --serie-1: #16171a;
+  --serie-2: #c9cac3;
+  --griglia: rgba(16, 17, 18, 0.08);
+  --traccia: #dcdcd6; /* fondo non riempito di gauge e progressi */
+}
+
+/* --------------------------------------------------------------------------
+   4. Tema scuro — preferenza di sistema
+   -------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="chiaro"]) {
+    color-scheme: dark;
+
+    --sfondo: #0b0b0c;
+    --sfondo-2: #101012;
+    --superficie: #151517;
+    --superficie-2: #1d1d20;
+    --superficie-3: #26262a;
+    --superficie-inversa: #f3f3f1;
+    --testo-su-inversa: #121316;
+
+    --bordo: #26262b;
+    --bordo-forte: #35353c;
+
+    --testo: #f2f2f3;
+    --testo-2: #a2a2a9;
+    --testo-3: #85858d;
+
+    --accento-tenue: rgba(143, 232, 28, 0.14);
+    --accento-bordo: rgba(143, 232, 28, 0.38);
+    --accento-testo: #a7ef4a;
+
+    --ombra-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --ombra-2: 0 2px 10px rgba(0, 0, 0, 0.45);
+    --ombra-3: 0 12px 34px rgba(0, 0, 0, 0.55);
+    --ombra-accento: 0 12px 34px rgba(91, 184, 0, 0.3);
+
+    --canonico: #74dd8a;
+    --canonico-bg: rgba(116, 221, 138, 0.15);
+    --duplicato: #f2bd63;
+    --duplicato-bg: rgba(242, 189, 99, 0.15);
+    --orfano: #ff9b7d;
+    --orfano-bg: rgba(255, 155, 125, 0.15);
+
+    --documento: #82b1ff;
+    --documento-bg: rgba(130, 177, 255, 0.15);
+    --tracciato: #bda6ff;
+    --tracciato-bg: rgba(189, 166, 255, 0.15);
+    --archivio: #f2bd63;
+    --archivio-bg: rgba(242, 189, 99, 0.15);
+    --media: #ff9dc4;
+    --media-bg: rgba(255, 157, 196, 0.15);
+    --installer: #5fdcc6;
+    --installer-bg: rgba(95, 220, 198, 0.15);
+    --artefatto: #a5a9b4;
+    --artefatto-bg: rgba(165, 169, 180, 0.14);
+    --altro: #8e929c;
+    --altro-bg: rgba(142, 146, 156, 0.13);
+
+    --successo: #74dd8a;
+    --successo-bg: rgba(116, 221, 138, 0.15);
+    --info: #82b1ff;
+    --info-bg: rgba(130, 177, 255, 0.15);
+    --avviso: #f2bd63;
+    --avviso-bg: rgba(242, 189, 99, 0.15);
+    --pericolo: #ff8d80;
+    --pericolo-bg: rgba(255, 141, 128, 0.15);
+
+    --serie-1: #eaeaec;
+    --serie-2: #4c4c53;
+    --griglia: rgba(255, 255, 255, 0.07);
+    --traccia: #2a2a2f;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   5. Tema scuro — scelta manuale (vince sulla preferenza di sistema)
+   -------------------------------------------------------------------------- */
+
+:root[data-tema="scuro"] {
+  color-scheme: dark;
+
+  --sfondo: #0b0b0c;
+  --sfondo-2: #101012;
+  --superficie: #151517;
+  --superficie-2: #1d1d20;
+  --superficie-3: #26262a;
+  --superficie-inversa: #f3f3f1;
+  --testo-su-inversa: #121316;
+
+  --bordo: #26262b;
+  --bordo-forte: #35353c;
+
+  --testo: #f2f2f3;
+  --testo-2: #a2a2a9;
+  --testo-3: #85858d;
+
+  --accento-tenue: rgba(143, 232, 28, 0.14);
+  --accento-bordo: rgba(143, 232, 28, 0.38);
+  --accento-testo: #a7ef4a;
+
+  --ombra-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ombra-2: 0 2px 10px rgba(0, 0, 0, 0.45);
+  --ombra-3: 0 12px 34px rgba(0, 0, 0, 0.55);
+  --ombra-accento: 0 12px 34px rgba(91, 184, 0, 0.3);
+
+  --canonico: #74dd8a;
+  --canonico-bg: rgba(116, 221, 138, 0.15);
+  --duplicato: #f2bd63;
+  --duplicato-bg: rgba(242, 189, 99, 0.15);
+  --orfano: #ff9b7d;
+  --orfano-bg: rgba(255, 155, 125, 0.15);
+
+  --documento: #82b1ff;
+  --documento-bg: rgba(130, 177, 255, 0.15);
+  --tracciato: #bda6ff;
+  --tracciato-bg: rgba(189, 166, 255, 0.15);
+  --archivio: #f2bd63;
+  --archivio-bg: rgba(242, 189, 99, 0.15);
+  --media: #ff9dc4;
+  --media-bg: rgba(255, 157, 196, 0.15);
+  --installer: #5fdcc6;
+  --installer-bg: rgba(95, 220, 198, 0.15);
+  --artefatto: #a5a9b4;
+  --artefatto-bg: rgba(165, 169, 180, 0.14);
+  --altro: #8e929c;
+  --altro-bg: rgba(142, 146, 156, 0.13);
+
+  --successo: #74dd8a;
+  --successo-bg: rgba(116, 221, 138, 0.15);
+  --info: #82b1ff;
+  --info-bg: rgba(130, 177, 255, 0.15);
+  --avviso: #f2bd63;
+  --avviso-bg: rgba(242, 189, 99, 0.15);
+  --pericolo: #ff8d80;
+  --pericolo-bg: rgba(255, 141, 128, 0.15);
+
+  --serie-1: #eaeaec;
+  --serie-2: #4c4c53;
+  --griglia: rgba(255, 255, 255, 0.07);
+  --traccia: #2a2a2f;
+}
+
+/* Ripristino esplicito del chiaro quando l'utente lo sceglie a mano e il
+   sistema è scuro: le variabili sopra sono già quelle di :root, basta il
+   color-scheme perché i controlli nativi tornino chiari. */
+:root[data-tema="chiaro"] {
+  color-scheme: light;
+}
+
+/* --------------------------------------------------------------------------
+   6. Utility
+   -------------------------------------------------------------------------- */
+
+.impila {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.impila-stretta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.riga {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.riga-sparsa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.crescente {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.griglia {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.griglia-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.griglia-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.griglia-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .griglia-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .griglia-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .griglia-4,
+  .griglia-3,
+  .griglia-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.testo-secondario {
+  color: var(--testo-2);
+}
+
+.testo-tenue {
+  color: var(--testo-3);
+}
+
+.testo-piccolo {
+  font-size: var(--minuto);
+}
+
+.testo-forte {
+  font-weight: var(--peso-forte);
+}
+
+.mono {
+  font-family: var(--famiglia-mono);
+  font-size: var(--piccolo);
+  font-variant-ligatures: none;
+}
+
+.cifre {
+  font-variant-numeric: tabular-nums;
+}
+
+.troncato {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.separatore {
+  height: 1px;
+  background: var(--bordo);
+  border: 0;
+}
+
+/* Testo per soli lettori di schermo. */
+.solo-lettori {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

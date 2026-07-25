@@ -1,0 +1,28 @@
+# Maintainer: russus <russus2@gmail.com>
+# Prebuilt PKGBUILD: assembles an Arch package from artifacts already produced
+# by the CI build step (no compilation happens here).
+pkgname=setaccio
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="Indicizza, categorizza e cerca i file locali — separando i documenti veri dagli artefatti di build"
+arch=('x86_64')
+url="https://github.com/russus87/setaccio"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3')
+optdepends=('poppler: fallback di estrazione testo dai PDF tramite pdftotext')
+options=('!strip' '!debug')
+
+package() {
+  # SQLite is linked statically into the binary (rusqlite `bundled`), and PDF
+  # text extraction is pure Rust: no extra shared library ships with this
+  # package.
+  install -Dm755 "$startdir/setaccio" "$pkgdir/usr/bin/setaccio"
+  install -Dm644 "$startdir/setaccio.desktop" \
+    "$pkgdir/usr/share/applications/setaccio.desktop"
+  install -Dm644 "$startdir/icon-128.png" \
+    "$pkgdir/usr/share/icons/hicolor/128x128/apps/setaccio.png"
+  install -Dm644 "$startdir/icon-256.png" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/setaccio.png"
+  install -Dm644 "$startdir/icon-512.png" \
+    "$pkgdir/usr/share/icons/hicolor/512x512/apps/setaccio.png"
+}
