@@ -33,6 +33,7 @@
   import Icona from "../ui/Icona.svelte";
   import Interruttore from "../ui/Interruttore.svelte";
   import StatTile from "../ui/StatTile.svelte";
+  import Treemap, { type VoceTreemap } from "../ui/Treemap.svelte";
   import Vuoto from "../ui/Vuoto.svelte";
   import RiepilogoPiano from "./RiepilogoPiano.svelte";
   import RigaFile from "./RigaFile.svelte";
@@ -137,6 +138,67 @@
   function percentuale(valore: number, massimo: number): number {
     return massimo > 0 ? Math.max(1, Math.round((valore / massimo) * 100)) : 0;
   }
+
+  // ---- Treemap -----------------------------------------------------------
+
+  /**
+   * Il pezzo di percorso comune a tutte le cartelle in gioco. Serve solo a
+   * scrivere etichette corte: `Scaricati/ISO` invece di
+   * `/home/russus/Scaricati/ISO`, che troncato non direbbe niente.
+   */
+  function radiceComune(percorsi: string[]): string {
+    if (percorsi.length === 0) return "";
+    const sep = percorsi[0].includes("\\") ? "\\" : "/";
+    let pezzi = percorsi[0].split(sep);
+    for (const p of percorsi.slice(1)) {
+      const altri = p.split(sep);
+      let i = 0;
+      while (i < pezzi.length && i < altri.length && pezzi[i] === altri[i]) i++;
+      pezzi = pezzi.slice(0, i);
+      if (pezzi.length === 0) break;
+    }
+    // Con una cartella sola il prefisso sarebbe la cartella stessa: si tiene
+    // indietro di un livello, altrimenti l'etichetta resterebbe vuota.
+    if (percorsi.length === 1 || pezzi.length === percorsi[0].split(sep).length) {
+      pezzi = pezzi.slice(0, -1);
+    }
+    return pezzi.join(sep);
+  }
+
+  /**
+   * Le tessere: un file ciascuna, l'area è la dimensione, il colore è il tipo
+   * — gli stessi token che colorano i `Badge`, così le due letture si
+   * corrispondono. Il raggruppamento è la cartella che li contiene, che è la
+   * cosa che l'elenco per dimensione non riesce a far vedere.
+   */
+  const vociTreemap = $derived.by<VoceTreemap[]>(() => {
+    const file = dati?.file ?? [];
+    if (file.length === 0) return [];
+    const cartelle = file.map((f) => cartellaDi(f.path));
+    const radice = radiceComune(cartelle);
+    const sep = radice.includes("\\") ? "\\" : "/";
+    const taglio = radice.length > 0 ? radice.length + 1 : 0;
+    // La cartella che *è* la radice comune resterebbe senza etichetta: le si
+    // dà il proprio ultimo segmento, che è il nome con cui la si riconosce.
+    const nomeRadice = radice.split(sep).filter(Boolean).pop() ?? "";
+    return file.map((f, i) => ({
+      id: f.id,
+      nome: f.nome,
+      gruppo: cartelle[i].slice(taglio) || nomeRadice || cartelle[i],
+      valore: f.size,
+      colore: `var(--${f.tipo})`,
+      dettaglio: f.tipo,
+    }));
+  });
+
+  /** I tipi davvero presenti fra le tessere, col loro peso, dal più grosso. */
+  const tipiInTreemap = $derived.by(() => {
+    const per = new Map<string, number>();
+    for (const f of dati?.file ?? []) {
+      per.set(f.tipo, (per.get(f.tipo) ?? 0) + f.size);
+    }
+    return [...per.entries()].sort((a, b) => b[1] - a[1]);
+  });
 
   // ---- Selezione ---------------------------------------------------------
 
@@ -344,6 +406,41 @@
       />
     </Card>
   {:else if dati}
+    <!-- La treemap ------------------------------------------------------- -->
+    <Card
+      titolo="La mappa dell'ingombro"
+      sottotitolo="L'area è la dimensione, il colore è il tipo · raggruppata per cartella · clicca per aggiungere al piano"
+    >
+      <div class="mappa">
+        {#if tipiInTreemap.length > 0}
+          <ul class="legenda-tipi">
+            {#each tipiInTreemap as [t, byte] (t)}
+              <li>
+                <span class="pastiglia" style="background: var(--{t})"></span>
+                <span>{tipoAlPlurale(t)}</span>
+                <span class="peso-legenda cifre">{formattaByte(byte)}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        <Treemap
+          voci={vociTreemap}
+          scelti={scelti}
+          altezza={440}
+          formato={(n) => formattaByte(n)}
+          onseleziona={commuta}
+          messaggioVuoto="Niente da disporre con questi filtri"
+        />
+
+        <p class="piede-mappa">
+          Le tessere sono i {formattaNumero(dati.file.length)} file più grandi che passano
+          i filtri, non tutto l'indice: sono {quotaMostrata}% del peso che i filtri lasciano
+          passare.
+        </p>
+      </div>
+    </Card>
+
     <div class="colonne">
       <!-- I file più grandi --------------------------------------------- -->
       <Card
@@ -476,6 +573,44 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--sp-3);
+  }
+
+  /* La mappa ----------------------------------------------------------- */
+  .mappa {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    min-width: 0;
+  }
+
+  .legenda-tipi {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-5);
+    font-size: var(--minuto);
+    color: var(--testo-2);
+  }
+
+  .legenda-tipi li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .pastiglia {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: none;
+  }
+
+  .peso-legenda {
+    color: var(--testo-3);
+  }
+
+  .piede-mappa {
+    font-size: var(--minuto);
+    color: var(--testo-3);
   }
 
   /* Filtri ------------------------------------------------------------- */
