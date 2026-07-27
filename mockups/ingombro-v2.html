@@ -1,0 +1,1059 @@
+<title>Setaccio — Ingombro v2</title>
+
+<style>
+/* ==========================================================================
+   Mockup navigabile di Ingombro v2 — treemap per classe di recuperabilità.
+   Token presi da src/app.css: stessa palette, stessa scala, stesso lime.
+   Dati reali misurati il 27/07/2026 (vedi docs/ingombro-v2.md).
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+:root {
+  --famiglia: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+  --famiglia-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", Consolas, monospace;
+
+  --micro: 0.6875rem;
+  --minuto: 0.75rem;
+  --piccolo: 0.8125rem;
+  --corpo: 0.875rem;
+  --medio: 1rem;
+  --grande: 1.25rem;
+  --titolo: 1.75rem;
+  --cifra: 2rem;
+
+  --riga-stretta: 1.15;
+  --riga-normale: 1.5;
+
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px; --sp-5: 20px;
+  --sp-6: 24px; --sp-7: 32px; --sp-8: 40px;
+
+  --raggio-sm: 8px; --raggio: 12px; --raggio-lg: 16px; --raggio-xl: 20px;
+  --raggio-pillola: 999px;
+
+  --transizione: 140ms cubic-bezier(0.32, 0.72, 0, 1);
+  --transizione-lenta: 260ms cubic-bezier(0.32, 0.72, 0, 1);
+
+  --accento: #8fe81c;
+  --accento-scuro: #5bb800;
+  --su-accento: #101b04;
+}
+
+/* --- tema chiaro (default) ------------------------------------------- */
+:root {
+  color-scheme: light;
+  --sfondo: #ffffff;
+  --sfondo-2: #f7f7f5;
+  --superficie: #f4f4f1;
+  --superficie-2: #ebebe7;
+  --superficie-3: #e2e2dd;
+  --bordo: #e5e5e0;
+  --bordo-forte: #d3d3cc;
+  --testo: #101112;
+  --testo-2: #5b5f5a;
+  --testo-3: #6f7369;
+  --accento-tenue: rgba(143, 232, 28, 0.2);
+  --accento-bordo: rgba(91, 184, 0, 0.45);
+  --accento-testo: #3d7600;
+  --ombra-1: 0 1px 2px rgba(16, 17, 18, 0.04);
+  --ombra-2: 0 2px 8px rgba(16, 17, 18, 0.06);
+  --ombra-3: 0 8px 28px rgba(16, 17, 18, 0.1);
+  --avviso: #97620f;
+  --avviso-bg: rgba(151, 98, 15, 0.13);
+  --pericolo: #c0392b;
+  --griglia-linea: rgba(16, 17, 18, 0.08);
+  --traccia: #dcdcd6;
+
+  /* Classi di recuperabilità — l'asse che porta il colore.
+     Derivate dai token semantici di setaccio, non dall'accento lime:
+     il lime resta la marca e l'interazione, non codifica lo stato.        */
+  --c1: #1f8a3c;  --c1-bg: rgba(31, 138, 60, 0.14);
+  --c2: #2f5fc4;  --c2-bg: rgba(47, 95, 196, 0.14);
+  --c3: #97620f;  --c3-bg: rgba(151, 98, 15, 0.15);
+  --c4: #5f6470;  --c4-bg: rgba(95, 100, 112, 0.12);
+  --su-classe: #ffffff;
+}
+
+/* --- tema scuro: preferenza di sistema -------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="chiaro"]):not([data-theme="light"]) {
+    color-scheme: dark;
+    --sfondo: #0b0b0c;
+    --sfondo-2: #101012;
+    --superficie: #151517;
+    --superficie-2: #1d1d20;
+    --superficie-3: #26262a;
+    --bordo: #26262b;
+    --bordo-forte: #35353c;
+    --testo: #f2f2f3;
+    --testo-2: #a2a2a9;
+    --testo-3: #85858d;
+    --accento-tenue: rgba(143, 232, 28, 0.14);
+    --accento-bordo: rgba(143, 232, 28, 0.38);
+    --accento-testo: #a7ef4a;
+    --ombra-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --ombra-2: 0 2px 10px rgba(0, 0, 0, 0.45);
+    --ombra-3: 0 12px 34px rgba(0, 0, 0, 0.55);
+    --avviso: #f2bd63;
+    --avviso-bg: rgba(242, 189, 99, 0.15);
+    --pericolo: #ff8d80;
+    --griglia-linea: rgba(255, 255, 255, 0.07);
+    --traccia: #2a2a2f;
+    --c1: #74dd8a;  --c1-bg: rgba(116, 221, 138, 0.16);
+    --c2: #82b1ff;  --c2-bg: rgba(130, 177, 255, 0.16);
+    --c3: #f2bd63;  --c3-bg: rgba(242, 189, 99, 0.16);
+    --c4: #a5a9b4;  --c4-bg: rgba(165, 169, 180, 0.14);
+    --su-classe: #0b0b0c;
+  }
+}
+
+/* --- tema scuro: scelta esplicita (vince sempre) ---------------------- */
+:root[data-tema="scuro"], :root[data-theme="dark"] {
+  color-scheme: dark;
+  --sfondo: #0b0b0c;
+  --sfondo-2: #101012;
+  --superficie: #151517;
+  --superficie-2: #1d1d20;
+  --superficie-3: #26262a;
+  --bordo: #26262b;
+  --bordo-forte: #35353c;
+  --testo: #f2f2f3;
+  --testo-2: #a2a2a9;
+  --testo-3: #85858d;
+  --accento-tenue: rgba(143, 232, 28, 0.14);
+  --accento-bordo: rgba(143, 232, 28, 0.38);
+  --accento-testo: #a7ef4a;
+  --ombra-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ombra-2: 0 2px 10px rgba(0, 0, 0, 0.45);
+  --ombra-3: 0 12px 34px rgba(0, 0, 0, 0.55);
+  --avviso: #f2bd63;
+  --avviso-bg: rgba(242, 189, 99, 0.15);
+  --pericolo: #ff8d80;
+  --griglia-linea: rgba(255, 255, 255, 0.07);
+  --traccia: #2a2a2f;
+  --c1: #74dd8a;  --c1-bg: rgba(116, 221, 138, 0.16);
+  --c2: #82b1ff;  --c2-bg: rgba(130, 177, 255, 0.16);
+  --c3: #f2bd63;  --c3-bg: rgba(242, 189, 99, 0.16);
+  --c4: #a5a9b4;  --c4-bg: rgba(165, 169, 180, 0.14);
+  --su-classe: #0b0b0c;
+}
+
+/* --- tema chiaro: scelta esplicita ------------------------------------ */
+:root[data-tema="chiaro"], :root[data-theme="light"] {
+  color-scheme: light;
+  --sfondo: #ffffff;
+  --sfondo-2: #f7f7f5;
+  --superficie: #f4f4f1;
+  --superficie-2: #ebebe7;
+  --superficie-3: #e2e2dd;
+  --bordo: #e5e5e0;
+  --bordo-forte: #d3d3cc;
+  --testo: #101112;
+  --testo-2: #5b5f5a;
+  --testo-3: #6f7369;
+  --accento-tenue: rgba(143, 232, 28, 0.2);
+  --accento-bordo: rgba(91, 184, 0, 0.45);
+  --accento-testo: #3d7600;
+  --avviso: #97620f;
+  --avviso-bg: rgba(151, 98, 15, 0.13);
+  --pericolo: #c0392b;
+  --griglia-linea: rgba(16, 17, 18, 0.08);
+  --traccia: #dcdcd6;
+  --c1: #1f8a3c;  --c1-bg: rgba(31, 138, 60, 0.14);
+  --c2: #2f5fc4;  --c2-bg: rgba(47, 95, 196, 0.14);
+  --c3: #97620f;  --c3-bg: rgba(151, 98, 15, 0.15);
+  --c4: #5f6470;  --c4-bg: rgba(95, 100, 112, 0.12);
+  --su-classe: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  font-family: var(--famiglia);
+  font-size: var(--corpo);
+  line-height: var(--riga-normale);
+  color: var(--testo);
+  background: var(--sfondo-2);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; border-radius: var(--raggio-sm); }
+.cifre { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--famiglia-mono); font-variant-ligatures: none; }
+
+/* ===== struttura ====================================================== */
+
+.telaio {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.intestazione { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; }
+.intestazione h1 { font-size: var(--titolo); font-weight: 600; line-height: var(--riga-stretta); letter-spacing: -0.02em; }
+.occhiello {
+  font-size: var(--micro); text-transform: uppercase; letter-spacing: 0.09em;
+  font-weight: 600; color: var(--accento-testo); margin-bottom: var(--sp-2);
+}
+.sottotitolo { color: var(--testo-2); margin-top: var(--sp-2); max-width: 62ch; }
+
+.interruttore-tema {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  height: 38px; padding: 0 var(--sp-4);
+  border: 1px solid var(--bordo-forte); border-radius: var(--raggio-pillola);
+  background: var(--sfondo); font-size: var(--minuto); font-weight: 500;
+  transition: border-color var(--transizione), background var(--transizione);
+  flex: none;
+}
+.interruttore-tema:hover { border-color: var(--accento-bordo); background: var(--accento-tenue); }
+
+.pannello {
+  background: var(--sfondo);
+  border: 1px solid var(--bordo);
+  border-radius: var(--raggio-xl);
+  padding: var(--sp-5);
+  box-shadow: var(--ombra-1);
+}
+.pannello > h2 {
+  font-size: var(--medio); font-weight: 600; line-height: var(--riga-stretta);
+  margin-bottom: var(--sp-1);
+}
+.pannello > h2 + .nota { margin-bottom: var(--sp-4); }
+.nota { font-size: var(--minuto); color: var(--testo-3); }
+
+/* ===== proiezione ===================================================== */
+
+.proiezione { display: flex; flex-direction: column; gap: var(--sp-4); }
+.proiezione-cifre { display: flex; align-items: baseline; gap: var(--sp-5); flex-wrap: wrap; }
+.grande-cifra { font-size: var(--cifra); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.freccia { color: var(--testo-3); font-size: var(--grande); }
+.dopo { color: var(--accento-testo); }
+
+.barra {
+  position: relative; height: 34px; border-radius: var(--raggio-sm);
+  background: var(--traccia); overflow: hidden; display: flex;
+  border: 1px solid var(--bordo);
+}
+.seg { height: 100%; transition: width var(--transizione-lenta); }
+.seg-resta { background: var(--superficie-3); }
+.seg-libera {
+  background: repeating-linear-gradient(
+    -45deg, var(--accento) 0 7px, var(--accento-scuro) 7px 14px);
+}
+.seg-libero { background: transparent; }
+.barra-etichette { display: flex; justify-content: space-between; font-size: var(--micro); color: var(--testo-3); }
+
+/* ===== legenda ======================================================== */
+
+.legenda { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.chip-classe {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--raggio-pillola);
+  border: 1px solid var(--bordo-forte);
+  background: var(--sfondo);
+  font-size: var(--minuto); font-weight: 500;
+  transition: border-color var(--transizione), background var(--transizione), transform var(--transizione);
+}
+.chip-classe:hover { transform: translateY(-1px); }
+.chip-classe[data-attiva="si"] { border-color: currentColor; }
+.chip-classe .pallino { width: 10px; height: 10px; border-radius: 3px; background: currentColor; flex: none; }
+.chip-classe .peso { color: var(--testo-3); font-variant-numeric: tabular-nums; }
+.chip-classe.c1 { color: var(--c1); } .chip-classe.c1[data-attiva="si"] { background: var(--c1-bg); }
+.chip-classe.c2 { color: var(--c2); } .chip-classe.c2[data-attiva="si"] { background: var(--c2-bg); }
+.chip-classe.c3 { color: var(--c3); } .chip-classe.c3[data-attiva="si"] { background: var(--c3-bg); }
+.chip-classe.c4 { color: var(--c4); cursor: not-allowed; }
+.chip-classe.c4:hover { transform: none; }
+.chip-classe .testo-chip { color: var(--testo); }
+
+/* ===== corpo: treemap + piano ========================================= */
+
+.corpo { display: grid; grid-template-columns: minmax(0, 1fr) 328px; gap: var(--sp-5); align-items: start; }
+@media (max-width: 1080px) { .corpo { grid-template-columns: minmax(0, 1fr); } }
+
+.tela { position: relative; width: 100%; height: 560px; }
+@media (max-width: 720px) { .tela { height: 700px; } }
+
+.gruppo {
+  position: absolute;
+  border-radius: var(--raggio-sm);
+  overflow: hidden;
+}
+.gruppo-titolo {
+  position: absolute; top: 0; left: 0; right: 0; height: 20px;
+  display: flex; align-items: center; gap: var(--sp-1);
+  padding: 0 var(--sp-2);
+  font-size: var(--micro); font-weight: 600; color: var(--testo-2);
+  letter-spacing: 0.02em; white-space: nowrap; overflow: hidden;
+  pointer-events: none; z-index: 2;
+}
+
+.tessera {
+  position: absolute;
+  border: 1px solid var(--sfondo);
+  border-radius: 4px;
+  padding: 5px 6px;
+  overflow: hidden;
+  text-align: left;
+  display: block;
+  transition: filter var(--transizione), box-shadow var(--transizione);
+  color: var(--su-classe);
+}
+.tessera:hover { filter: brightness(1.12); z-index: 3; }
+.tessera .t-nome {
+  font-size: var(--micro); font-weight: 600; line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
+.tessera .t-peso {
+  font-size: var(--micro); line-height: 1.3; opacity: 0.82;
+  font-variant-numeric: tabular-nums; display: block;
+}
+.tessera[data-cl="1"] { background: var(--c1); }
+.tessera[data-cl="2"] { background: var(--c2); }
+.tessera[data-cl="3"] { background: var(--c3); }
+.tessera[data-cl="4"] { background: var(--c4); cursor: not-allowed; }
+.tessera[data-scelta="no"] { opacity: 0.34; }
+.tessera[data-scelta="si"] {
+  box-shadow: inset 0 0 0 2px var(--accento), inset 0 0 0 4px var(--su-accento);
+  z-index: 2;
+}
+.tessera[data-cl="4"]:hover { filter: none; }
+
+/* ===== rail del piano ================================================= */
+
+.piano { display: flex; flex-direction: column; gap: var(--sp-4); position: sticky; top: var(--sp-5); }
+.piano-cifra { display: flex; flex-direction: column; gap: var(--sp-1); }
+.piano-cifra .etichetta { font-size: var(--micro); text-transform: uppercase; letter-spacing: 0.08em; color: var(--testo-3); font-weight: 600; }
+.piano-cifra .valore { font-size: var(--cifra); font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.piano-cifra .valore.reale { color: var(--accento-testo); }
+.piano-cifra .sotto { font-size: var(--minuto); color: var(--testo-2); }
+
+.elenco-piano { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow-y: auto; }
+.voce-piano {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2); border-radius: var(--raggio-sm);
+  font-size: var(--minuto);
+}
+.voce-piano:hover { background: var(--superficie); }
+.voce-piano .barretta { width: 3px; align-self: stretch; border-radius: 2px; flex: none; }
+.voce-piano .vp-nome { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voce-piano .vp-peso { color: var(--testo-2); font-variant-numeric: tabular-nums; flex: none; }
+.vuoto { font-size: var(--minuto); color: var(--testo-3); padding: var(--sp-4) 0; text-align: center; }
+
+.allerta {
+  display: flex; gap: var(--sp-3); padding: var(--sp-3);
+  border-radius: var(--raggio); font-size: var(--minuto);
+  background: var(--avviso-bg); color: var(--testo);
+  border: 1px solid transparent;
+}
+.allerta .icona { color: var(--avviso); font-weight: 700; flex: none; }
+.allerta strong { font-weight: 600; }
+.allerta p { color: var(--testo-2); margin-top: 2px; }
+
+.azioni { display: flex; flex-direction: column; gap: var(--sp-2); }
+.bottone-primario {
+  height: 46px; border-radius: var(--raggio); font-weight: 600;
+  background: var(--accento); color: var(--su-accento);
+  transition: filter var(--transizione);
+}
+.bottone-primario:hover { filter: brightness(1.06); }
+.bottone-primario:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+.bottone-quieto {
+  height: 38px; border-radius: var(--raggio); font-size: var(--minuto); font-weight: 500;
+  color: var(--testo-2); border: 1px solid var(--bordo-forte);
+}
+.bottone-quieto:hover { border-color: var(--bordo-forte); background: var(--superficie); }
+
+/* ===== rapporti ======================================================= */
+
+.rapporti { display: flex; flex-direction: column; gap: var(--sp-3); }
+.rig-rapporto { display: grid; grid-template-columns: 148px minmax(0, 1fr) 92px; gap: var(--sp-3); align-items: center; }
+@media (max-width: 620px) { .rig-rapporto { grid-template-columns: 110px minmax(0, 1fr) 76px; } }
+.rig-rapporto .nome { font-size: var(--minuto); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rig-rapporto .traccia-b { height: 10px; border-radius: var(--raggio-pillola); background: var(--traccia); overflow: hidden; }
+.rig-rapporto .riempi { height: 100%; border-radius: var(--raggio-pillola); background: var(--c1); }
+.rig-rapporto .val { font-size: var(--minuto); font-variant-numeric: tabular-nums; color: var(--testo-2); text-align: right; }
+.rig-rapporto .val b { color: var(--testo); font-weight: 600; }
+
+.piede {
+  font-size: var(--minuto); color: var(--testo-3);
+  border-top: 1px solid var(--bordo); padding-top: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+}
+.piede code { font-family: var(--famiglia-mono); font-size: var(--micro); background: var(--superficie); padding: 1px 5px; border-radius: 4px; }
+</style>
+
+<div class="telaio">
+
+  <header class="intestazione">
+    <div>
+      <div class="occhiello">Mockup · Ingombro v2</div>
+      <h1>Dove sono i gigabyte, e quali tornano indietro</h1>
+      <p class="sottotitolo">
+        L'area è la dimensione, il colore è il <strong>costo di recupero</strong>. Le tessere si
+        selezionano per comporre il piano: il grafico <em>è</em> l'editor. Dati reali misurati
+        su questa macchina il 27/07/2026.
+      </p>
+    </div>
+    <button class="interruttore-tema" id="btn-tema" type="button" aria-live="polite">
+      <span id="etichetta-tema">Tema scuro</span>
+    </button>
+  </header>
+
+  <section class="pannello proiezione" aria-labelledby="tit-proiezione">
+    <h2 id="tit-proiezione">Proiezione</h2>
+    <p class="nota">Occupazione del disco prima e dopo l'esecuzione del piano selezionato.</p>
+    <div class="proiezione-cifre">
+      <div>
+        <div class="nota">Ora</div>
+        <div class="grande-cifra cifre" id="cifra-prima">781 GB</div>
+      </div>
+      <div class="freccia" aria-hidden="true">→</div>
+      <div>
+        <div class="nota">Dopo il piano</div>
+        <div class="grande-cifra cifre dopo" id="cifra-dopo">606 GB</div>
+      </div>
+      <div style="margin-left:auto">
+        <div class="nota">Libero</div>
+        <div class="grande-cifra cifre" id="cifra-libero">344 GB</div>
+      </div>
+    </div>
+    <div class="barra" role="img" aria-label="Barra di occupazione del disco" id="barra">
+      <div class="seg seg-resta" id="seg-resta"></div>
+      <div class="seg seg-libera" id="seg-libera"></div>
+      <div class="seg seg-libero" id="seg-libero"></div>
+    </div>
+    <div class="barra-etichette">
+      <span>0</span>
+      <span id="et-libera">175 GB liberati dal piano</span>
+      <span>950 GB</span>
+    </div>
+  </section>
+
+  <div class="legenda" id="legenda" role="group" aria-label="Classi di recuperabilità"></div>
+
+  <div class="corpo">
+
+    <section class="pannello" aria-labelledby="tit-treemap">
+      <h2 id="tit-treemap">Treemap</h2>
+      <p class="nota">
+        Raggruppata per posizione sul filesystem, colorata per classe. Clicca una tessera per
+        aggiungerla al piano — quelle grigie sono dati veri e non si selezionano.
+      </p>
+      <div class="tela" id="tela"></div>
+    </section>
+
+    <aside class="pannello piano" aria-labelledby="tit-piano">
+      <h2 id="tit-piano">Il piano</h2>
+
+      <div class="piano-cifra">
+        <span class="etichetta">Spazio su disco recuperato</span>
+        <span class="valore reale cifre" id="val-reale">175 GB</span>
+        <span class="sotto">
+          dimensione logica <b class="cifre" id="val-logico">411 GB</b> —
+          su btrfs con <code class="mono">compress=zstd</code> il disco ne occupa meno
+        </span>
+      </div>
+
+      <div class="elenco-piano" id="elenco-piano"></div>
+
+      <div class="allerta" id="allerta-bundle">
+        <span class="icona" aria-hidden="true">!</span>
+        <div>
+          <strong>5 deliverable da mettere da parte</strong>
+          <p>Dentro <code class="mono">target/release/bundle</code>: Rustman AppImage e deb,
+             dotforge deb, Mermaid Forge deb e rpm — 112 MB. Vanno spostati, non cancellati.</p>
+        </div>
+      </div>
+
+      <div class="allerta" id="allerta-permessi">
+        <span class="icona" aria-hidden="true">!</span>
+        <div>
+          <strong>1 cartella richiede privilegi</strong>
+          <p><code class="mono">norio/norioc-api/target</code> — 230 file di proprietà
+             <code class="mono">root:root</code>, scritti da un container. Senza sudo il piano
+             si ferma qui.</p>
+        </div>
+      </div>
+
+      <div class="azioni">
+        <button class="bottone-primario" type="button" id="btn-esegui">Vedi l'anteprima</button>
+        <button class="bottone-quieto" type="button" id="btn-azzera">Svuota il piano</button>
+      </div>
+    </aside>
+
+  </div>
+
+  <section class="pannello" aria-labelledby="tit-rapporti">
+    <h2 id="tit-rapporti">Rapporto artefatto / sorgente</h2>
+    <p class="nota">
+      Ordinati per rapporto, non per dimensione: è il rapporto a segnalare il caso patologico.
+      Nota che il progetto più <em>grosso</em> non è il più <em>malato</em>.
+    </p>
+    <div class="rapporti" id="rapporti"></div>
+  </section>
+
+  <footer class="piede">
+    <p>
+      <strong>Le dimensioni sono quelle di <code>du</code>, cioè logiche.</strong> Il 27/07/2026
+      la pulizia di 34 build dir che <code>du</code> valutava 411 GB ha spostato
+      <code>df</code> di 175 GB: i binari di debug si comprimono più di due volte. Setaccio deve
+      misurare l'occupazione reale degli extent, o dire a chiare lettere quale delle due cifre
+      sta mostrando — promettere 411 e consegnarne 175 è un problema di fiducia.
+    </p>
+    <p>
+      Lo si vede anche qui: le 69 tessere sommano <b>841 GB</b> mentre il disco ne conteneva
+      781. Nessuna delle due cifre è sbagliata — sono misure di cose diverse, ed è precisamente
+      l'ambiguità che la vista deve togliere di mezzo.
+    </p>
+    <p>Palette, scala tipografica e token presi da <code>src/app.css</code>. Note di design in <code>docs/ingombro-v2.md</code>.</p>
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------------------
+   Dati — misurazioni reali del 27/07/2026, in byte.
+   classe: 1 rigenerabile offline · 2 rigenerabile con rete · 3 spazzatura
+           4 dato vero (mai proposto per la cancellazione)
+   --------------------------------------------------------------------------- */
+
+const CLASSI = {
+  1: { nome: "Rigenerabile offline", spiega: "Ricompila senza rete: i sorgenti delle dipendenze sono già in cache. Costa solo CPU." },
+  2: { nome: "Rigenerabile con rete", spiega: "Torna solo riscaricando da un registry raggiungibile." },
+  3: { nome: "Spazzatura",            spiega: "Non c'è niente da recuperare, mai." },
+  4: { nome: "Dato vero",             spiega: "Irrecuperabile. Si riporta, non si propone." },
+};
+
+const GRUPPI = [
+  { nome: "~/vms", voci: [
+    { n: "docker/data.img",      b: 137438953472, c: 4 },
+    { n: "kvm/windows.qcow2",    b: 109521666048, c: 4 },
+  ]},
+  { nome: "~/Documenti/Progetti", voci: [
+    { n: "space-station",        b: 37920571593, c: 1 },
+    { n: "devtoys",              b: 33438477063, c: 1 },
+    { n: "archmind",             b: 24271623049, c: 1 },
+    { n: "setaccio",             b: 19707149915, c: 1 },
+    { n: "workpulse",            b: 18880878546, c: 1 },
+    { n: "lotus",                b: 16553256660, c: 1 },
+    { n: "musea",                b: 13846897087, c: 1 },
+    { n: "pinterest_crawler",    b: 12696976521, c: 1 },
+    { n: "cortocircuito",        b: 12556463876, c: 1 },
+    { n: "crime",                b:  9378565791, c: 1 },
+    { n: "aquarium",             b:  9191166981, c: 1 },
+    { n: "russus_launcher",      b:  7916447408, c: 1 },
+    { n: "red_carpet",           b:  7605290111, c: 1 },
+    { n: "2pass",                b:  6865165423, c: 1 },
+    { n: "3dprint",              b:  5758971680, c: 1 },
+    { n: "solfa",                b:  5555294172, c: 1 },
+    { n: "destriero",            b:  5414396643, c: 1 },
+    { n: "ilc-flow-validator",   b:  4243916982, c: 1 },
+    { n: "dockone",              b:  3389512942, c: 1 },
+    { n: "mermaid",              b:  2657541801, c: 1 },
+  ]},
+  { nome: "~/Documenti/corso-c", voci: [
+    { n: "pdf_accessibility_studio", b: 43328149212, c: 1 },
+    { n: "charon",               b: 38587726092, c: 1 },
+    { n: "rustman",              b: 28311870396, c: 1 },
+    { n: "moba_linux",           b: 18998600318, c: 1 },
+    { n: "dotforge",             b: 17284378489, c: 1 },
+    { n: "oops",                 b: 16135557545, c: 1 },
+    { n: "glyphbox",             b:  7484061140, c: 1 },
+    { n: "jenkins_studio",       b:  6625434968, c: 1 },
+    { n: "s3browser",            b:  6045047958, c: 1 },
+  ]},
+  { nome: "~/.lmstudio", voci: [
+    { n: "gemma-4-26B",          b: 15032385536, c: 4 },
+    { n: "qwen2.5-coder-14b",    b: 12884901888, c: 4 },
+    { n: "DeepSeek-Coder-V2",    b:  7516192768, c: 4 },
+    { n: "gemma-4-E4B",          b:  5368709120, c: 4 },
+    { n: "altri modelli",        b:  3221225472, c: 4 },
+  ]},
+  { nome: "Cache dei pacchetti", voci: [
+    { n: ".gradle/caches",       b: 15032385536, c: 2 },
+    { n: ".nuget",               b:  7623566950, c: 2 },
+    { n: "node_modules",         b:  7408798105, c: 2 },
+    { n: ".npm",                 b:  5261334938, c: 2 },
+    { n: ".cache/JetBrains",     b:  4294967296, c: 2 },
+    { n: ".cargo/registry",      b:  2791728742, c: 2 },
+    { n: "share/NuGet",          b:  2147483648, c: 2 },
+    { n: ".rustup",              b:  1932735283, c: 2 },
+    { n: "puppeteer",            b:  1395864371, c: 2 },
+    { n: ".pub-cache",           b:   752877568, c: 2 },
+    { n: "ms-playwright",        b:   677380096, c: 2 },
+    { n: ".m2",                  b:   325058560, c: 2 },
+  ]},
+  { nome: "Spazzatura", voci: [
+    { n: "cache pacman",         b: 13958643712, c: 3 },
+    { n: "cestino",              b:  7838315315, c: 3 },
+    { n: "cache yay",            b:  5476083302, c: 3 },
+    { n: "plocate.db",           b:  1825361100, c: 3 },
+    { n: "coredump",             b:   916455424, c: 3 },
+  ]},
+  { nome: "Sistema", voci: [
+    { n: "/usr",                 b: 21474836480, c: 4 },
+    { n: "/opt/rocm",            b:  7623566950, c: 4 },
+    { n: "/opt (altro)",         b:  4187593114, c: 4 },
+  ]},
+  { nome: "~/RiderProjects", voci: [
+    { n: "phoenix",              b:  7516192768, c: 4 },
+    { n: "phoenix_old",          b:  6871947674, c: 4 },
+    { n: "Raven",                b:  2576980378, c: 4 },
+    { n: "extensions",           b:  2040109465, c: 4 },
+  ]},
+  { nome: "~/Scaricati", voci: [
+    { n: "ISO",                  b:  9234179686, c: 4 },
+    { n: "wallpapers",           b:  7945689661, c: 4 },
+    { n: "eagledesigner-dev",    b:  4724464025, c: 4 },
+  ]},
+  { nome: "JetBrains Toolbox", voci: [
+    { n: "rider",                b:  6012954214, c: 4 },
+    { n: "intellij-idea",        b:  4509715660, c: 4 },
+    { n: "rustrover",            b:  3328599654, c: 4 },
+    { n: "datagrip",             b:  2899102924, c: 4 },
+    { n: "dottrace",             b:   671088640, c: 4 },
+    { n: "dotmemory",            b:   402653184, c: 4 },
+  ]},
+];
+
+/* Rapporto artefatto/sorgente: target misurato / sorgente misurato
+   (du -sb escludendo node_modules e .git). */
+const RAPPORTI = [
+  { n: "dotforge",                 art: 17284378489, src:  1352125 },
+  { n: "workpulse",                art: 18880878546, src:  1489889 },
+  { n: "cortocircuito",            art: 12556463876, src:  1034216 },
+  { n: "pinterest_crawler",        art: 12696976521, src:  1190877 },
+  { n: "lotus",                    art: 16553256660, src:  1578714 },
+  { n: "moba_linux",               art: 18998600318, src:  1832135 },
+  { n: "aquarium",                 art:  9191166981, src:  1119482 },
+  { n: "setaccio",                 art: 19707149915, src:  2486290 },
+  { n: "rustman",                  art: 28311870396, src:  4423732 },
+  { n: "3dprint",                  art:  5758971680, src:   939368 },
+  { n: "glyphbox",                 art:  7484061140, src:  1227833 },
+  { n: "s3browser",                art:  6045047958, src:  1029550 },
+  { n: "pdf_accessibility_studio", art: 43328149212, src: 11749223 },
+  { n: "charon",                   art: 38587726092, src: 18657840 },
+];
+
+/* Fattore di compressione osservato: du diceva 411 GB, df si è mosso di 175. */
+const FATTORE_REALE = 175 / 411;
+
+const DISCO = 950 * 1024 ** 3;
+const USATO = 781 * 1024 ** 3;
+
+/* --------------------------------------------------------------------------- */
+
+const GIB = 1024 ** 3;
+const MIB = 1024 ** 2;
+
+function peso(b) {
+  if (b >= 10 * GIB) return Math.round(b / GIB) + " GB";
+  if (b >= GIB) return (b / GIB).toFixed(1) + " GB";
+  return Math.round(b / MIB) + " MB";
+}
+
+/* Treemap squarificato (Bruls, Huizing, van Wijk). */
+function peggiore(aree, somma, lato) {
+  const max = Math.max.apply(null, aree);
+  const min = Math.min.apply(null, aree);
+  const s2 = somma * somma;
+  const l2 = lato * lato;
+  return Math.max((l2 * max) / s2, s2 / (l2 * min));
+}
+
+function squarifica(nodi, x, y, w, h) {
+  const fuori = [];
+  const items = nodi.filter((n) => n.value > 0).sort((a, b) => b.value - a.value);
+  let rx = x, ry = y, rw = w, rh = h, i = 0;
+
+  while (i < items.length && rw > 0.5 && rh > 0.5) {
+    let totRim = 0;
+    for (let k = i; k < items.length; k++) totRim += items[k].value;
+    const scala = (rw * rh) / totRim;
+    const lato = Math.min(rw, rh);
+
+    const fila = [];
+    let areaFila = 0;
+    let miglior = Infinity;
+
+    while (i < items.length) {
+      const a = items[i].value * scala;
+      const aree = fila.map((n) => n.value * scala).concat([a]);
+      const p = peggiore(aree, areaFila + a, lato);
+      if (fila.length === 0 || p <= miglior) {
+        fila.push(items[i]);
+        areaFila += a;
+        miglior = p;
+        i++;
+      } else break;
+    }
+
+    if (rw >= rh) {
+      const larg = areaFila / rh;
+      let cy = ry;
+      for (const n of fila) {
+        const alt = (n.value * scala) / larg;
+        fuori.push({ nodo: n, x: rx, y: cy, w: larg, h: alt });
+        cy += alt;
+      }
+      rx += larg; rw -= larg;
+    } else {
+      const alt = areaFila / rw;
+      let cx = rx;
+      for (const n of fila) {
+        const larg = (n.value * scala) / alt;
+        fuori.push({ nodo: n, x: cx, y: ry, w: larg, h: alt });
+        cx += larg;
+      }
+      ry += alt; rh -= alt;
+    }
+  }
+  return fuori;
+}
+
+/* --------------------------------------------------------------------------- */
+
+const scelte = new Set();          /* chiavi "gruppo/voce" selezionate */
+const tela = document.getElementById("tela");
+let tessere = [];                  /* [{chiave, el}] per aggiornamenti mirati */
+
+function chiaveDi(g, v) { return g.nome + "/" + v.n; }
+
+function selezionabile(v) { return v.c !== 4; }
+
+function totaleScelto() {
+  let t = 0;
+  for (const g of GRUPPI) for (const v of g.voci) {
+    if (scelte.has(chiaveDi(g, v))) t += v.b;
+  }
+  return t;
+}
+
+/* --- disegno della treemap ------------------------------------------- */
+
+function disegnaTreemap() {
+  tela.textContent = "";
+  tessere = [];
+
+  const W = tela.clientWidth;
+  const H = tela.clientHeight;
+  if (W < 40 || H < 40) return;
+
+  const gruppiNodo = GRUPPI.map((g) => ({
+    gruppo: g,
+    value: g.voci.reduce((s, v) => s + v.b, 0),
+  }));
+
+  for (const rg of squarifica(gruppiNodo, 0, 0, W, H)) {
+    const box = document.createElement("div");
+    box.className = "gruppo";
+    box.style.left = rg.x + "px";
+    box.style.top = rg.y + "px";
+    box.style.width = rg.w + "px";
+    box.style.height = rg.h + "px";
+
+    const mostraTitolo = rg.h > 46 && rg.w > 90;
+    if (mostraTitolo) {
+      const t = document.createElement("div");
+      t.className = "gruppo-titolo";
+      t.textContent = rg.nodo.gruppo.nome;
+      box.appendChild(t);
+    }
+
+    const cima = mostraTitolo ? 20 : 0;
+    const voci = rg.nodo.gruppo.voci.map((v) => ({ voce: v, value: v.b }));
+
+    for (const rv of squarifica(voci, 0, cima, rg.w, Math.max(0, rg.h - cima))) {
+      const v = rv.nodo.voce;
+      const chiave = chiaveDi(rg.nodo.gruppo, v);
+
+      const el = document.createElement(selezionabile(v) ? "button" : "div");
+      el.className = "tessera";
+      el.dataset.cl = String(v.c);
+      el.dataset.scelta = scelte.has(chiave) ? "si" : "no";
+      el.style.left = rv.x + "px";
+      el.style.top = rv.y + "px";
+      el.style.width = rv.w + "px";
+      el.style.height = rv.h + "px";
+
+      const etichetta = v.n + " — " + peso(v.b) + " — " + CLASSI[v.c].nome;
+      if (selezionabile(v)) {
+        el.type = "button";
+        el.setAttribute("aria-pressed", scelte.has(chiave) ? "true" : "false");
+        el.setAttribute("aria-label", etichetta);
+        el.addEventListener("click", () => commuta(chiave));
+      } else {
+        el.setAttribute("role", "img");
+        el.setAttribute("aria-label", etichetta + " — non selezionabile");
+      }
+      el.title = etichetta;
+
+      if (rv.h > 26 && rv.w > 54) {
+        const nome = document.createElement("span");
+        nome.className = "t-nome";
+        nome.textContent = v.n;
+        el.appendChild(nome);
+        if (rv.h > 40) {
+          const p = document.createElement("span");
+          p.className = "t-peso";
+          p.textContent = peso(v.b);
+          el.appendChild(p);
+        }
+      }
+
+      box.appendChild(el);
+      tessere.push({ chiave: chiave, el: el });
+    }
+    tela.appendChild(box);
+  }
+}
+
+function commuta(chiave) {
+  if (scelte.has(chiave)) scelte.delete(chiave);
+  else scelte.add(chiave);
+  aggiornaScelte();
+  aggiorna();
+}
+
+function aggiornaScelte() {
+  for (const t of tessere) {
+    const attiva = scelte.has(t.chiave);
+    t.el.dataset.scelta = attiva ? "si" : "no";
+    if (t.el.tagName === "BUTTON") t.el.setAttribute("aria-pressed", attiva ? "true" : "false");
+  }
+}
+
+/* --- legenda ---------------------------------------------------------- */
+
+function pesoClasse(c) {
+  let t = 0;
+  for (const g of GRUPPI) for (const v of g.voci) if (v.c === c) t += v.b;
+  return t;
+}
+
+function classeTuttaScelta(c) {
+  let tot = 0, sel = 0;
+  for (const g of GRUPPI) for (const v of g.voci) if (v.c === c) {
+    tot++;
+    if (scelte.has(chiaveDi(g, v))) sel++;
+  }
+  return tot > 0 && sel === tot;
+}
+
+function costruisciLegenda() {
+  const box = document.getElementById("legenda");
+  box.textContent = "";
+  for (const c of [1, 2, 3, 4]) {
+    const b = document.createElement("button");
+    b.className = "chip-classe c" + c;
+    b.type = "button";
+    b.title = CLASSI[c].spiega;
+
+    const pal = document.createElement("span");
+    pal.className = "pallino";
+    b.appendChild(pal);
+
+    const testo = document.createElement("span");
+    testo.className = "testo-chip";
+    testo.textContent = CLASSI[c].nome;
+    b.appendChild(testo);
+
+    const p = document.createElement("span");
+    p.className = "peso";
+    p.textContent = peso(pesoClasse(c));
+    b.appendChild(p);
+
+    if (c === 4) {
+      b.disabled = true;
+      b.setAttribute("aria-disabled", "true");
+    } else {
+      b.addEventListener("click", () => {
+        const tutta = classeTuttaScelta(c);
+        for (const g of GRUPPI) for (const v of g.voci) if (v.c === c) {
+          const k = chiaveDi(g, v);
+          if (tutta) scelte.delete(k); else scelte.add(k);
+        }
+        aggiornaScelte();
+        aggiorna();
+      });
+    }
+    box.appendChild(b);
+  }
+}
+
+function aggiornaLegenda() {
+  const chips = document.querySelectorAll("#legenda .chip-classe");
+  [1, 2, 3, 4].forEach((c, i) => {
+    if (chips[i]) chips[i].dataset.attiva = classeTuttaScelta(c) ? "si" : "no";
+  });
+}
+
+/* --- pannelli dipendenti dal piano ------------------------------------ */
+
+function aggiorna() {
+  const logico = totaleScelto();
+  const reale = Math.round(logico * FATTORE_REALE);
+  const dopo = Math.max(0, USATO - reale);
+
+  document.getElementById("val-logico").textContent = peso(logico);
+  document.getElementById("val-reale").textContent = peso(reale);
+  document.getElementById("cifra-prima").textContent = peso(USATO);
+  document.getElementById("cifra-dopo").textContent = peso(dopo);
+  document.getElementById("cifra-libero").textContent = peso(DISCO - dopo);
+  document.getElementById("et-libera").textContent = peso(reale) + " liberati dal piano";
+
+  const pResta = (dopo / DISCO) * 100;
+  const pLibera = (reale / DISCO) * 100;
+  document.getElementById("seg-resta").style.width = pResta + "%";
+  document.getElementById("seg-libera").style.width = pLibera + "%";
+  document.getElementById("seg-libero").style.width = (100 - pResta - pLibera) + "%";
+
+  /* elenco */
+  const el = document.getElementById("elenco-piano");
+  el.textContent = "";
+  const voci = [];
+  for (const g of GRUPPI) for (const v of g.voci) {
+    if (scelte.has(chiaveDi(g, v))) voci.push({ g: g, v: v });
+  }
+  voci.sort((a, b) => b.v.b - a.v.b);
+
+  if (voci.length === 0) {
+    const vuoto = document.createElement("p");
+    vuoto.className = "vuoto";
+    vuoto.textContent = "Nessuna voce selezionata. Clicca le tessere o una classe in legenda.";
+    el.appendChild(vuoto);
+  } else {
+    for (const x of voci) {
+      const r = document.createElement("div");
+      r.className = "voce-piano";
+
+      const bar = document.createElement("span");
+      bar.className = "barretta";
+      bar.style.background = "var(--c" + x.v.c + ")";
+      r.appendChild(bar);
+
+      const nome = document.createElement("span");
+      nome.className = "vp-nome";
+      nome.textContent = x.v.n;
+      nome.title = x.g.nome + "/" + x.v.n;
+      r.appendChild(nome);
+
+      const p = document.createElement("span");
+      p.className = "vp-peso cifre";
+      p.textContent = peso(x.v.b);
+      r.appendChild(p);
+
+      el.appendChild(r);
+    }
+  }
+
+  /* le due allerte valgono solo se il piano tocca davvero quelle cose */
+  const toccaBuild = voci.some((x) => x.v.c === 1);
+  document.getElementById("allerta-bundle").style.display = toccaBuild ? "" : "none";
+  document.getElementById("allerta-permessi").style.display = toccaBuild ? "" : "none";
+
+  const btn = document.getElementById("btn-esegui");
+  btn.disabled = voci.length === 0;
+  btn.textContent = voci.length === 0
+    ? "Vedi l'anteprima"
+    : "Vedi l'anteprima di " + voci.length + " voci";
+
+  aggiornaLegenda();
+}
+
+/* --- rapporti --------------------------------------------------------- */
+
+function costruisciRapporti() {
+  const box = document.getElementById("rapporti");
+  const righe = RAPPORTI
+    .map((r) => ({ n: r.n, art: r.art, src: r.src, rap: r.art / r.src }))
+    .sort((a, b) => b.rap - a.rap);
+  const max = righe[0].rap;
+
+  for (const r of righe) {
+    const riga = document.createElement("div");
+    riga.className = "rig-rapporto";
+
+    const nome = document.createElement("div");
+    nome.className = "nome";
+    nome.textContent = r.n;
+    nome.title = r.n;
+    riga.appendChild(nome);
+
+    const tr = document.createElement("div");
+    tr.className = "traccia-b";
+    const fill = document.createElement("div");
+    fill.className = "riempi";
+    fill.style.width = (r.rap / max) * 100 + "%";
+    tr.appendChild(fill);
+    riga.appendChild(tr);
+
+    const val = document.createElement("div");
+    val.className = "val";
+    const b = document.createElement("b");
+    b.textContent = Math.round(r.rap).toLocaleString("it-IT") + "×";
+    val.appendChild(b);
+    riga.appendChild(val);
+
+    riga.title = r.n + " — artefatto " + peso(r.art) + " su sorgente " + peso(r.src);
+    box.appendChild(riga);
+  }
+}
+
+/* --- tema ------------------------------------------------------------- */
+
+function scuroOra() {
+  const attr = document.documentElement.dataset.tema;
+  if (attr === "scuro") return true;
+  if (attr === "chiaro") return false;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function aggiornaEtichettaTema() {
+  document.getElementById("etichetta-tema").textContent = scuroOra() ? "Tema chiaro" : "Tema scuro";
+}
+
+document.getElementById("btn-tema").addEventListener("click", () => {
+  document.documentElement.dataset.tema = scuroOra() ? "chiaro" : "scuro";
+  aggiornaEtichettaTema();
+});
+
+document.getElementById("btn-azzera").addEventListener("click", () => {
+  scelte.clear();
+  aggiornaScelte();
+  aggiorna();
+});
+
+/* --- avvio ------------------------------------------------------------ */
+
+/* Stato iniziale: la classe 1 è il piano consigliato. */
+for (const g of GRUPPI) for (const v of g.voci) {
+  if (v.c === 1) scelte.add(chiaveDi(g, v));
+}
+
+costruisciLegenda();
+costruisciRapporti();
+disegnaTreemap();
+aggiorna();
+aggiornaEtichettaTema();
+
+let attesa = null;
+window.addEventListener("resize", () => {
+  clearTimeout(attesa);
+  attesa = setTimeout(() => { disegnaTreemap(); }, 120);
+});
+</script>
